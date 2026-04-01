@@ -255,8 +255,11 @@ class KyteSyncApp(tk.Tk):
 
     def _build_left(self, parent):
         tk.Label(parent, text="Kyte Token:", font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        tk.Label(parent, text="(F12 > Console > copy(localStorage.getItem('kyte_token')))",
-                 font=("Segoe UI", 7), wraplength=230, fg="#555").pack(anchor="w")
+        tk.Label(parent, text="F12 > Console > pega esto:", font=("Segoe UI", 7), fg="#555").pack(anchor="w")
+        js_code = tk.Entry(parent, font=("Consolas", 7), fg="#0a5", relief="flat",
+                           bg="#f0f0f0", readonlybackground="#f0f0f0", state="readonly")
+        js_code.insert(0, "copy(localStorage.getItem('kyte_token'))")
+        js_code.pack(fill="x", pady=(1, 4))
         self._token_txt = scrolledtext.ScrolledText(parent, height=5, wrap="word",
                                                      font=("Consolas", 8))
         self._token_txt.pack(fill="x", pady=(2, 8))
