@@ -85,7 +85,7 @@ def build_categories(
         if filter_category and cat_name.lower() != filter_category.lower():
             continue
 
-        raw_image = p.get("imageMedium") or p.get("image") or ""
+        raw_image = p.get("image") or p.get("imageThumb") or ""
         image_url = build_image_url(raw_image, uid) if raw_image else None
 
         if embed_images and image_url and session:
