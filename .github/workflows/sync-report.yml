@@ -1,0 +1,62 @@
+name: Reporte de precios
+
+on:
+  # Se dispara cuando suben un Excel a input/
+  push:
+    paths:
+      - 'input/*.xlsx'
+      - 'input/*.xls'
+
+  # O manualmente desde GitHub
+  workflow_dispatch:
+    inputs:
+      source_file:
+        description: 'Nombre del archivo Excel en input/ (ej: LISTA.xlsx)'
+        required: false
+        default: ''
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Detect source file
+        id: detect
+        run: |
+          if [ -n "${{ github.event.inputs.source_file }}" ]; then
+            echo "file=input/${{ github.event.inputs.source_file }}" >> $GITHUB_OUTPUT
+          else
+            # Get the most recent xlsx in input/
+            FILE=$(ls -t input/*.xlsx input/*.xls 2>/dev/null | head -1)
+            if [ -z "$FILE" ]; then
+              echo "ERROR: No Excel files found in input/"
+              exit 1
+            fi
+            echo "file=$FILE" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate sync report
+        env:
+          KYTE_TOKEN: ${{ secrets.KYTE_TOKEN }}
+        run: |
+          python sync_prices_api.py \
+            --source "${{ steps.detect.outputs.file }}" \
+            --token "$KYTE_TOKEN" \
+            --update-cost \
+            --dry-run \
+            --report "reporte_sync.xlsx"
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-sync-${{ github.run_number }}
+          path: reporte_sync.xlsx
+          retention-days: 30

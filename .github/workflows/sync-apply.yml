@@ -1,0 +1,51 @@
+name: Aplicar actualizacion de precios
+
+on:
+  # Solo manual — requiere confirmacion explicita
+  workflow_dispatch:
+    inputs:
+      source_file:
+        description: 'Nombre del archivo Excel en input/ (ej: LISTA.xlsx)'
+        required: true
+      confirm:
+        description: 'Escribi CONFIRMAR para aplicar los cambios'
+        required: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'CONFIRMAR'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Apply price updates
+        env:
+          KYTE_TOKEN: ${{ secrets.KYTE_TOKEN }}
+        run: |
+          python sync_prices_api.py \
+            --source "input/${{ github.event.inputs.source_file }}" \
+            --token "$KYTE_TOKEN" \
+            --update-cost \
+            --report "reporte_sync.xlsx"
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-aplicado-${{ github.run_number }}
+          path: reporte_sync.xlsx
+          retention-days: 30
+
+  rejected:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm != 'CONFIRMAR'
+    steps:
+      - run: |
+          echo "Actualizacion cancelada. Escribi CONFIRMAR para aplicar."
+          exit 1

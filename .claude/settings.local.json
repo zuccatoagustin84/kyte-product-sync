@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "*",
+      "Bash(python sync_prices_api.py --source \"LISTA DISTRIBUCION COMPLETA 21-02-2026.xlsx\" --update-cost --dry-run)",
+      "WebFetch(domain:web.kyteapp.com)",
+      "Bash(pip install:*)",
+      "Bash(playwright install:*)",
+      "Bash(python extract_token.py)",
+      "Bash(python extract_token.py --profile \"./kyte-profile\")",
+      "Bash(python sync_prices_api.py --source \"LISTA DISTRIBUCION COMPLETA 21-02-2026.xlsx\" --dry-run --update-cost)",
+      "Bash(python sync_prices_api.py --source \"LISTA DISTRIBUCION COMPLETA 21-02-2026.xlsx\" --dry-run --update-cost --report)",
+      "Bash(gh auth:*)",
+      "Bash(where gh:*)"
+    ]
+  }
+}

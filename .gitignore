@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+output/
+
+# Excel files (except in input/)
+*.xls
+*.xlsx
+!input/*.xlsx
+!input/*.xls
+
+# Secrets
+.kyte_token
+kyte-profile/
+
+# Reports (generated)
+reporte_sync.xlsx
+
+# Kyte exported files
+Productos.xlsx
+productos_fixed.xlsx
+kyte_updated.xlsx
