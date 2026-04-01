@@ -19,6 +19,9 @@ kyte-profile/
 
 # Reports (generated)
 reporte_sync.xlsx
+reportes/*.xlsx
+reportes/.~lock.*
+*.log
 
 # Kyte exported files
 Productos.xlsx

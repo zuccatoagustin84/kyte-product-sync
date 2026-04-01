@@ -11,7 +11,16 @@
       "Bash(python sync_prices_api.py --source \"LISTA DISTRIBUCION COMPLETA 21-02-2026.xlsx\" --dry-run --update-cost)",
       "Bash(python sync_prices_api.py --source \"LISTA DISTRIBUCION COMPLETA 21-02-2026.xlsx\" --dry-run --update-cost --report)",
       "Bash(gh auth:*)",
-      "Bash(where gh:*)"
+      "Bash(where gh:*)",
+      "Bash(python sync_prices_api.py --source \"LISTA DISTRIBUCION COMPLETA 21-02-2026.xlsx\" --update-cost --dry-run --report \"reporte_sync.xlsx\")",
+      "Bash(python sync_prices_api.py --source \"LISTA DISTRIBUCION COMPLETA 21-02-2026.xlsx\" --update-cost --dry-run --report)",
+      "Bash(python -c \":*)",
+      "Bash(winget install:*)",
+      "Bash(cmd.exe /c \"winget install --id GitHub.cli -e --accept-source-agreements --accept-package-agreements\")",
+      "Bash(cmd.exe /c \"where gh\")",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" --version)",
+      "Bash(\"/c/Users/zucca/AppData/Local/GitHub CLI/gh.exe\" --version)",
+      "Read(//c/Program Files/**)"
     ]
   }
 }

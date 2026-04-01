@@ -105,30 +105,25 @@ def match_and_prepare_updates(
 
     stats = {
         "matched_by_code": 0,
-        "matched_by_name": 0,
         "price_updated": 0,
         "price_unchanged": 0,
+        "price_zero_skipped": 0,
+        "no_code_in_source": 0,
         "not_found": [],
         "source_total": len(source_df),
         "kyte_total": len(kyte_products),
     }
 
-    # Rows for report
     report_rows = []
 
-    # Build Kyte lookup indexes
+    # Build Kyte lookup index by code
     kyte_by_code = {}
-    kyte_by_name = {}
-
     for product in kyte_products:
         code = normalize(product.get("code", ""))
-        name = normalize(product.get("name", ""))
         if code:
             kyte_by_code[code] = product
-        if name:
-            kyte_by_name[name] = product
 
-    print(f"  Kyte index: {len(kyte_by_code)} by code, {len(kyte_by_name)} by name")
+    print(f"  Kyte index: {len(kyte_by_code)} products by code")
 
     updates = []
 
@@ -136,7 +131,6 @@ def match_and_prepare_updates(
         new_price = src_row[src_cols["price"]]
         if pd.isna(new_price):
             continue
-
         try:
             new_price = float(new_price)
         except (ValueError, TypeError):
@@ -147,57 +141,86 @@ def match_and_prepare_updates(
         if "code" in src_cols and pd.notna(src_row[src_cols["code"]]):
             src_code_val = normalize(src_row[src_cols["code"]])
 
-        # Strategy 1: match by code
-        matched_product = None
-        match_type = None
-
-        if src_code_val and src_code_val in kyte_by_code:
-            matched_product = kyte_by_code[src_code_val]
-            match_type = "code"
-
-        # Strategy 2: match by name
-        if matched_product is None:
-            src_name_norm = normalize(src_name_val)
-            if src_name_norm in kyte_by_name:
-                matched_product = kyte_by_name[src_name_norm]
-                match_type = "name"
-
-        if matched_product is None:
-            stats["not_found"].append(f"{src_name_val} (code: {src_code_val or 'N/A'})")
+        # Skip source rows without code
+        if not src_code_val:
+            stats["no_code_in_source"] += 1
             report_rows.append({
-                "Estado": "SIN MATCH",
+                "Estado": "SIN CODIGO",
                 "Nombre Fuente": src_name_val,
-                "Codigo Fuente": src_code_val or "",
+                "Codigo Fuente": "",
                 "Nombre Kyte": "",
                 "Codigo Kyte": "",
                 "Precio Kyte": "",
+                "Costo Kyte": "",
                 "Precio Nuevo": new_price,
                 "Diferencia": "",
-                "Match Por": "",
+                "Diferencia %": "",
+                "Categoria": "",
             })
             continue
 
-        if match_type == "code":
-            stats["matched_by_code"] += 1
-        else:
-            stats["matched_by_name"] += 1
+        # Match by code only
+        matched_product = kyte_by_code.get(src_code_val)
 
-        # Check if price actually changed
+        if matched_product is None:
+            stats["not_found"].append(f"{src_name_val} (code: {src_code_val})")
+            report_rows.append({
+                "Estado": "SIN MATCH",
+                "Nombre Fuente": src_name_val,
+                "Codigo Fuente": src_code_val,
+                "Nombre Kyte": "",
+                "Codigo Kyte": "",
+                "Precio Kyte": "",
+                "Costo Kyte": "",
+                "Precio Nuevo": new_price,
+                "Diferencia": "",
+                "Diferencia %": "",
+                "Categoria": "",
+            })
+            continue
+
+        stats["matched_by_code"] += 1
         old_price = matched_product.get("salePrice", 0)
         old_cost = matched_product.get("saleCostPrice", 0)
+        cat_name = ""
+        cat = matched_product.get("category")
+        if isinstance(cat, dict):
+            cat_name = cat.get("name", "")
+
+        # Skip if new price is 0 or negative
+        if new_price <= 0:
+            stats["price_zero_skipped"] += 1
+            report_rows.append({
+                "Estado": "PRECIO 0 (IGNORADO)",
+                "Nombre Fuente": src_name_val,
+                "Codigo Fuente": src_code_val,
+                "Nombre Kyte": matched_product.get("name", ""),
+                "Codigo Kyte": matched_product.get("code", ""),
+                "Precio Kyte": old_price,
+                "Costo Kyte": old_cost,
+                "Precio Nuevo": new_price,
+                "Diferencia": "",
+                "Diferencia %": "",
+                "Categoria": cat_name,
+            })
+            continue
 
         price_changed = abs(old_price - new_price) > 0.001
         cost_changed = update_cost and abs((old_cost or 0) - new_price) > 0.001
+        diff = round(new_price - old_price, 2)
+        diff_pct = round((diff / old_price) * 100, 1) if old_price else 0
 
         row = {
             "Nombre Fuente": src_name_val,
-            "Codigo Fuente": src_code_val or "",
+            "Codigo Fuente": src_code_val,
             "Nombre Kyte": matched_product.get("name", ""),
             "Codigo Kyte": matched_product.get("code", ""),
             "Precio Kyte": old_price,
+            "Costo Kyte": old_cost,
             "Precio Nuevo": new_price,
-            "Diferencia": round(new_price - old_price, 2),
-            "Match Por": match_type,
+            "Diferencia": diff,
+            "Diferencia %": f"{diff_pct:+.1f}%",
+            "Categoria": cat_name,
         }
 
         if price_changed or cost_changed:
@@ -220,57 +243,95 @@ def match_and_prepare_updates(
 
 
 def generate_report_excel(report_rows: list[dict], stats: dict, output_path: str = "reporte_sync.xlsx"):
-    """Generate an Excel report with all matching results."""
+    """Generate an Excel report with multiple sheets."""
     df = pd.DataFrame(report_rows)
 
-    # Reorder columns
-    col_order = ["Estado", "Nombre Fuente", "Codigo Fuente", "Nombre Kyte", "Codigo Kyte",
-                 "Precio Kyte", "Precio Nuevo", "Diferencia", "Match Por"]
+    col_order = ["Estado", "Codigo Fuente", "Codigo Kyte", "Nombre Fuente", "Nombre Kyte",
+                 "Categoria", "Precio Kyte", "Costo Kyte", "Precio Nuevo", "Diferencia", "Diferencia %"]
     df = df[[c for c in col_order if c in df.columns]]
 
-    # Sort: ACTUALIZAR first, then SIN MATCH, then SIN CAMBIO
-    sort_map = {"ACTUALIZAR": 0, "SIN MATCH": 1, "SIN CAMBIO": 2}
-    df["_sort"] = df["Estado"].map(sort_map)
-    df = df.sort_values("_sort").drop(columns=["_sort"])
+    sort_map = {"ACTUALIZAR": 0, "PRECIO 0 (IGNORADO)": 1, "SIN MATCH": 2, "SIN CODIGO": 3, "SIN CAMBIO": 4}
+    df["_sort"] = df["Estado"].map(sort_map).fillna(5)
+    df = df.sort_values(["_sort", "Codigo Fuente"]).drop(columns=["_sort"])
 
-    # Write with openpyxl for formatting
+    # Force code columns: try numeric, otherwise keep as string without Excel's ' prefix
+    def clean_code(val):
+        if pd.isna(val) or val == "":
+            return val
+        try:
+            num = float(val)
+            return int(num) if num == int(num) else num
+        except (ValueError, TypeError):
+            return str(val)
+
+    for col in ["Codigo Fuente", "Codigo Kyte"]:
+        if col in df.columns:
+            df[col] = df[col].apply(clean_code)
+
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="Detalle", index=False)
+        # Hoja 1: Solo los que cambian
+        df_update = df[df["Estado"] == "ACTUALIZAR"]
+        df_update.to_excel(writer, sheet_name="A Actualizar", index=False)
 
-        # Summary sheet
+        # Hoja 2: Precios 0 ignorados
+        df_zero = df[df["Estado"] == "PRECIO 0 (IGNORADO)"]
+        if len(df_zero) > 0:
+            df_zero.to_excel(writer, sheet_name="Precio 0 Ignorados", index=False)
+
+        # Hoja 3: Sin match (codigo no encontrado en Kyte)
+        df_nomatch = df[df["Estado"].isin(["SIN MATCH", "SIN CODIGO"])]
+        if len(df_nomatch) > 0:
+            df_nomatch.to_excel(writer, sheet_name="Sin Match", index=False)
+
+        # Hoja 4: Sin cambio
+        df_ok = df[df["Estado"] == "SIN CAMBIO"]
+        df_ok.to_excel(writer, sheet_name="Sin Cambio", index=False)
+
+        # Hoja 5: Todo junto
+        df.to_excel(writer, sheet_name="Detalle Completo", index=False)
+
+        # Hoja 6: Resumen
         summary_data = {
             "Metrica": [
                 "Productos en Kyte",
                 "Productos en lista fuente",
+                "",
                 "Matcheados por codigo",
-                "Matcheados por nombre",
-                "Total matcheados",
                 "Precios a actualizar",
                 "Precios sin cambio",
-                "Sin match en Kyte",
+                "Precio 0 en fuente (ignorados)",
+                "",
+                "Sin match (codigo no en Kyte)",
+                "Sin codigo en fuente",
             ],
             "Valor": [
                 stats["kyte_total"],
                 stats["source_total"],
+                "",
                 stats["matched_by_code"],
-                stats["matched_by_name"],
-                stats["matched_by_code"] + stats["matched_by_name"],
                 stats["price_updated"],
                 stats["price_unchanged"],
+                stats["price_zero_skipped"],
+                "",
                 len(stats["not_found"]),
+                stats["no_code_in_source"],
             ],
         }
         pd.DataFrame(summary_data).to_excel(writer, sheet_name="Resumen", index=False)
 
     print(f"\n  Reporte guardado: {output_path}")
-    print(f"    - Hoja 'Resumen': metricas generales")
-    print(f"    - Hoja 'Detalle': {len(df)} filas (ACTUALIZAR / SIN MATCH / SIN CAMBIO)")
+    print(f"    - 'A Actualizar':       {len(df_update)} productos con precio diferente")
+    print(f"    - 'Precio 0 Ignorados': {len(df_zero)} productos con precio 0 en fuente")
+    print(f"    - 'Sin Match':          {len(df_nomatch)} productos sin match")
+    print(f"    - 'Sin Cambio':         {len(df_ok)} productos OK")
+    print(f"    - 'Detalle Completo':   {len(df)} filas totales")
+    print(f"    - 'Resumen':            metricas")
     return output_path
 
 
 def print_report(stats: dict, update_stats: dict | None = None):
     """Print sync summary report."""
-    total_matched = stats["matched_by_code"] + stats["matched_by_name"]
+    total_matched = stats["matched_by_code"]
 
     print("\n" + "=" * 60)
     print("  SYNC REPORT")
@@ -278,10 +339,10 @@ def print_report(stats: dict, update_stats: dict | None = None):
     print(f"  Kyte products:          {stats['kyte_total']}")
     print(f"  Source products:        {stats['source_total']}")
     print(f"  Matched by code:        {stats['matched_by_code']}")
-    print(f"  Matched by name:        {stats['matched_by_name']}")
-    print(f"  Total matched:          {total_matched}")
     print(f"  Prices to update:       {stats['price_updated']}")
     print(f"  Prices unchanged:       {stats['price_unchanged']}")
+    print(f"  Precio 0 (ignorados):   {stats['price_zero_skipped']}")
+    print(f"  Sin codigo en fuente:   {stats['no_code_in_source']}")
     print(f"  NOT found in Kyte:      {len(stats['not_found'])}")
 
     if update_stats:
@@ -337,8 +398,8 @@ def main():
         help="Show what would change without actually updating"
     )
     parser.add_argument(
-        "--report", default=None, nargs="?", const="reporte_sync.xlsx",
-        help="Generar reporte Excel con el detalle (default: reporte_sync.xlsx)"
+        "--report", default=None, nargs="?", const="auto",
+        help="Generar reporte Excel en reportes/ con timestamp (o pasar ruta custom)"
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true",
@@ -385,7 +446,14 @@ def main():
 
     # Step 4: Generate report if requested
     if args.report:
-        generate_report_excel(report_rows, stats, args.report)
+        if args.report == "auto":
+            from datetime import datetime
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_path = f"reportes/reporte_sync_{ts}.xlsx"
+        else:
+            report_path = args.report
+        Path(report_path).parent.mkdir(parents=True, exist_ok=True)
+        generate_report_excel(report_rows, stats, report_path)
 
     if not updates:
         print("\n  No price updates needed!")

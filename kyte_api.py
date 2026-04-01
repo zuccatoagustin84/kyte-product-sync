@@ -157,12 +157,43 @@ class KyteClient:
         resp = self._request("GET", f"/products/{self.config.aid}/total")
         return resp.json()
 
+    @staticmethod
+    def _strip_image_field(val: str, uid: str) -> str:
+        """
+        Strip uid/ prefix and ?alt=media suffix from image paths.
+        Kyte re-adds these on PUT, so sending them causes duplication.
+        """
+        if not val:
+            return val
+        from urllib.parse import unquote
+        decoded = unquote(val).lstrip("/")
+        while decoded.startswith(uid + "/"):
+            decoded = decoded[len(uid) + 1:]
+        decoded = decoded.split("?")[0]
+        return decoded
+
+    def _clean_images_for_put(self, product: dict) -> dict:
+        """Strip image prefixes so Kyte doesn't double them on PUT."""
+        import copy
+        p = copy.deepcopy(product)
+        uid = self.config.uid
+        for field in ("image", "imageLarge", "imageMedium", "imageThumb"):
+            if p.get(field):
+                p[field] = self._strip_image_field(p[field], uid)
+        for g in p.get("gallery", []):
+            for field in ("image", "imageLarge", "imageMedium", "imageThumb"):
+                if g.get(field):
+                    g[field] = self._strip_image_field(g[field], uid)
+        return p
+
     def update_product(self, product: dict) -> dict:
         """
         Update a product via PUT.
         Requires the FULL product object (Kyte replaces the entire document).
+        Automatically cleans image paths to prevent duplication.
         """
-        resp = self._request("PUT", "/product", json=product)
+        cleaned = self._clean_images_for_put(product)
+        resp = self._request("PUT", "/product", json=cleaned)
         try:
             return resp.json()
         except Exception:
