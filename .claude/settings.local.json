@@ -20,7 +20,11 @@
       "Bash(cmd.exe /c \"where gh\")",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" --version)",
       "Bash(\"/c/Users/zucca/AppData/Local/GitHub CLI/gh.exe\" --version)",
-      "Read(//c/Program Files/**)"
+      "Read(//c/Program Files/**)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(git credential-manager:*)",
+      "Bash(git credential:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501)"
     ]
   }
 }

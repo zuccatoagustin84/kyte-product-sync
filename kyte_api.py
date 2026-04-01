@@ -31,6 +31,11 @@ def parse_kyte_token(token: str) -> tuple[str, str]:
     Returns:
         (uid, aid)
     """
+    # Fix padding if needed
+    token = token.strip()
+    padding = 4 - len(token) % 4
+    if padding != 4:
+        token += "=" * padding
     decoded = base64.b64decode(token).decode("utf-8")
     parts = decoded.split(".")
     if len(parts) < 3:
