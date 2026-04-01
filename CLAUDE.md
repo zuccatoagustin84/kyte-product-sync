@@ -36,11 +36,13 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 | File | Purpose |
 |------|---------|
 | `app.py` | Streamlit web UI (deployed to Streamlit Cloud) |
+| `app_desktop.py` | Desktop GUI (tkinter, build con PyInstaller) |
 | `kyte_api.py` | API client (pagination, image cleaning, bulk updates) |
 | `sync_prices_api.py` | CLI script (dry-run, report, update) |
 | `sync_prices.py` | Legacy Excel-based sync (not used) |
 | `extract_token.py` | Playwright token extractor |
 | `get_token.js` | Browser console token extractor |
+| `build_desktop.bat` | Build script → `dist/KytePriceSync.exe` |
 
 ## Matching logic
 - **Code only** (name matching was removed - caused issues)
@@ -66,6 +68,13 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 - **Match by code only** - no name matching
 - Test account (Agustin Zuccato) uid/aid: `2Bj9r4qNoYRd5JdTXX0rHMI9hjg2` / `2Bj9r4qNoYRd5J`
 
+## Las 4 opciones de uso
+1. **CLI** — `python sync_prices_api.py --dry-run`
+2. **Streamlit local** — `streamlit run app.py`
+3. **Streamlit Cloud** — https://kyte-appu-5lomurjh9bjmhhkkptqrh4.streamlit.app
+4. **Desktop .exe** — `dist/KytePriceSync.exe` (doble clic, build con `build_desktop.bat`)
+5. **Vercel/Next.js** — pendiente
+
 ## Next steps
-- Build desktop app (double-click .exe) with PyInstaller or similar
-- Consider migrating Streamlit to proper web app (Next.js + Vercel) for better UX
+- Firmar el .exe con un certificado (opcional, evita warnings de Windows Defender)
+- Migrar Streamlit a Next.js + Vercel para mejor UX
