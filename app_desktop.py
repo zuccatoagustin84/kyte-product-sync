@@ -6,7 +6,6 @@ Build: pyinstaller --onefile --windowed app_desktop.py
 import io
 import os
 import queue
-import subprocess
 import sys
 import threading
 import tkinter as tk
@@ -19,6 +18,25 @@ from jinja2 import Environment, FileSystemLoader
 
 from kyte_api import KyteClient, KyteConfig, KyteAPIError, parse_kyte_token
 from generate_catalog import build_categories
+
+
+# ── Path helpers ──────────────────────────────────────────────────────────────
+
+def _exe_dir() -> Path:
+    """Directorio del ejecutable (o del script en desarrollo)."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+
+def _meipass_dir() -> Path:
+    """Directorio de archivos bundleados por PyInstaller (onefile)."""
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS)
+    return Path(__file__).parent
+
+
+TOKEN_FILE = _exe_dir() / ".kyte_token"
 
 
 # ── Helpers (misma logica que app.py) ────────────────────────────────────────
@@ -185,21 +203,39 @@ class KyteSyncApp(tk.Tk):
         self._report_df: pd.DataFrame | None = None
         self._updates: list = []
         self._client: KyteClient | None = None
+        self._cat_client: KyteClient | None = None
         self._q: queue.Queue = queue.Queue()
 
         self._build_ui()
+        self._load_saved_token()
         self._poll_queue()
+
+    # ── Token persistence ─────────────────────────────────────
+
+    def _load_saved_token(self):
+        if TOKEN_FILE.exists():
+            try:
+                token = TOKEN_FILE.read_text(encoding="utf-8").strip()
+                if token:
+                    self._token_txt.insert("1.0", token)
+                    self._set_status("Token cargado desde archivo.")
+            except Exception:
+                pass
+
+    def _save_token(self, token: str):
+        try:
+            TOKEN_FILE.write_text(token, encoding="utf-8")
+        except Exception:
+            pass
 
     # ── UI construction ──────────────────────────────────────
 
     def _build_ui(self):
-        # Top bar
         top = tk.Frame(self, bg="#1a1a2e", pady=8)
         top.pack(fill="x")
         tk.Label(top, text="Kyte Price Sync", font=("Segoe UI", 16, "bold"),
                  bg="#1a1a2e", fg="white").pack(side="left", padx=16)
 
-        # Main layout: left panel + right content
         body = tk.Frame(self)
         body.pack(fill="both", expand=True, padx=10, pady=8)
 
@@ -213,14 +249,11 @@ class KyteSyncApp(tk.Tk):
         self._build_left(left)
         self._build_right(right)
 
-        # Status bar
         self._status_var = tk.StringVar(value="Listo.")
-        status = tk.Label(self, textvariable=self._status_var, anchor="w",
-                          relief="sunken", bd=1, font=("Segoe UI", 9))
-        status.pack(fill="x", side="bottom")
+        tk.Label(self, textvariable=self._status_var, anchor="w",
+                 relief="sunken", bd=1, font=("Segoe UI", 9)).pack(fill="x", side="bottom")
 
     def _build_left(self, parent):
-        # Token
         tk.Label(parent, text="Kyte Token:", font=("Segoe UI", 9, "bold")).pack(anchor="w")
         tk.Label(parent, text="(F12 > Console > copy(localStorage.getItem('kyte_token')))",
                  font=("Segoe UI", 7), wraplength=230, fg="#555").pack(anchor="w")
@@ -228,14 +261,12 @@ class KyteSyncApp(tk.Tk):
                                                      font=("Consolas", 8))
         self._token_txt.pack(fill="x", pady=(2, 8))
 
-        # Update cost
         self._update_cost = tk.BooleanVar(value=True)
         ttk.Checkbutton(parent, text="Actualizar costo tambien",
                         variable=self._update_cost).pack(anchor="w", pady=(0, 8))
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
 
-        # Excel picker
         tk.Label(parent, text="Lista de distribuidor:", font=("Segoe UI", 9, "bold")).pack(anchor="w")
         self._file_var = tk.StringVar(value="(ninguno)")
         tk.Label(parent, textvariable=self._file_var, font=("Segoe UI", 8),
@@ -244,13 +275,11 @@ class KyteSyncApp(tk.Tk):
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
 
-        # Run button
         self._run_btn = ttk.Button(parent, text="Comparar precios",
                                    command=self._run_compare, style="Accent.TButton")
         self._run_btn.pack(fill="x", pady=2)
 
     def _build_right(self, parent):
-        # Stats row
         stats_frame = tk.Frame(parent)
         stats_frame.pack(fill="x", pady=(0, 8))
 
@@ -268,27 +297,19 @@ class KyteSyncApp(tk.Tk):
             self._stat_vars[key] = var
             tk.Label(box, textvariable=var, font=("Segoe UI", 18, "bold"), fg=color).pack()
 
-        # Tabs + treeviews
         notebook = ttk.Notebook(parent)
         notebook.pack(fill="both", expand=True)
 
         self._trees = {}
-        for tab_label, tab_key in [
-            ("A Actualizar", "update"),
-            ("Sin Match", "nomatch"),
-            ("Todo", "all"),
-        ]:
+        for tab_label, tab_key in [("A Actualizar", "update"), ("Sin Match", "nomatch"), ("Todo", "all")]:
             frame = tk.Frame(notebook)
             notebook.add(frame, text=tab_label)
-            tree = self._make_tree(frame)
-            self._trees[tab_key] = tree
+            self._trees[tab_key] = self._make_tree(frame)
 
-        # Tab Catalogo
         cat_frame = tk.Frame(notebook, padx=16, pady=16)
         notebook.add(cat_frame, text="Catalogo")
         self._build_catalog_tab(cat_frame)
 
-        # Action bar
         action = tk.Frame(parent)
         action.pack(fill="x", pady=(8, 0))
 
@@ -305,15 +326,20 @@ class KyteSyncApp(tk.Tk):
 
     def _build_catalog_tab(self, parent):
         tk.Label(parent, text="Generar Catalogo HTML", font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(parent, text="Genera un catalogo imprimible por categoria. Abri el HTML en Chrome y usa Ctrl+P para PDF.",
+        tk.Label(parent,
+                 text="Genera un catalogo imprimible por categoria. No necesita comparar precios antes.",
                  font=("Segoe UI", 9), fg="#555", wraplength=600).pack(anchor="w", pady=(2, 14))
 
-        # Filtro categoria
+        # Categoria: combobox + boton cargar
         row1 = tk.Frame(parent)
         row1.pack(fill="x", pady=4)
-        tk.Label(row1, text="Filtrar por categoria (opcional):", font=("Segoe UI", 9)).pack(side="left")
+        tk.Label(row1, text="Categoria:", font=("Segoe UI", 9)).pack(side="left")
         self._cat_filter = tk.StringVar()
-        ttk.Entry(row1, textvariable=self._cat_filter, width=30).pack(side="left", padx=8)
+        self._cat_combo = ttk.Combobox(row1, textvariable=self._cat_filter, width=32, state="normal")
+        self._cat_combo.pack(side="left", padx=8)
+        tk.Label(row1, text="(vacio = todas)", font=("Segoe UI", 8), fg="#888").pack(side="left")
+        self._load_cats_btn = ttk.Button(row1, text="Cargar categorias", command=self._load_categories)
+        self._load_cats_btn.pack(side="left", padx=(16, 0))
 
         # Opciones
         row2 = tk.Frame(parent)
@@ -324,7 +350,7 @@ class KyteSyncApp(tk.Tk):
         ttk.Checkbutton(row2, text="Embeber imagenes (offline, mas lento)",
                         variable=self._cat_embed).pack(side="left")
 
-        # Boton + progreso
+        # Boton generar + progreso
         row3 = tk.Frame(parent)
         row3.pack(fill="x", pady=(12, 4))
         self._cat_btn = ttk.Button(row3, text="Generar catalogo", command=self._run_catalog)
@@ -332,7 +358,6 @@ class KyteSyncApp(tk.Tk):
         self._cat_progress = ttk.Progressbar(row3, mode="indeterminate", length=180)
         self._cat_progress.pack(side="left", padx=12)
 
-        # Log
         tk.Label(parent, text="Log:", font=("Segoe UI", 8), fg="#666").pack(anchor="w", pady=(10, 2))
         self._cat_log = scrolledtext.ScrolledText(parent, height=8, state="disabled",
                                                    font=("Consolas", 8), fg="#333")
@@ -384,27 +409,34 @@ class KyteSyncApp(tk.Tk):
     def _get_token(self) -> str:
         return self._token_txt.get("1.0", "end").strip()
 
-    def _run_compare(self):
+    def _make_client(self) -> tuple[KyteClient, str] | None:
+        """Parsea el token, guarda en archivo y devuelve (client, uid). None si error."""
         token = self._get_token()
         if not token:
             messagebox.showerror("Error", "Pega el token de Kyte primero.")
-            return
-        if not hasattr(self, "_excel_path") or not self._excel_path:
-            messagebox.showerror("Error", "Elegí un archivo Excel primero.")
-            return
-
+            return None
         try:
             uid, aid = parse_kyte_token(token)
         except Exception as e:
             messagebox.showerror("Token invalido", str(e))
-            return
+            return None
+        self._save_token(token)
+        return KyteClient(KyteConfig(uid=uid, aid=aid)), uid
 
-        self._client = KyteClient(KyteConfig(uid=uid, aid=aid))
+    # ── Sync: compare ────────────────────────────────────────
+
+    def _run_compare(self):
+        if not hasattr(self, "_excel_path") or not self._excel_path:
+            messagebox.showerror("Error", "Elegi un archivo Excel primero.")
+            return
+        result = self._make_client()
+        if result is None:
+            return
+        self._client, _ = result
         self._run_btn.config(state="disabled")
         self._apply_btn.config(state="disabled")
         self._dl_btn.config(state="disabled")
         self._set_status("Conectando con Kyte API...")
-
         threading.Thread(target=self._worker_compare, daemon=True).start()
 
     def _worker_compare(self):
@@ -412,67 +444,70 @@ class KyteSyncApp(tk.Tk):
             self._q.put(("status", "Descargando productos de Kyte..."))
             kyte_products = self._client.get_products()
             self._q.put(("status", f"Kyte: {len(kyte_products)} productos. Leyendo Excel..."))
-
             source_df = load_source(self._excel_path)
             self._q.put(("status", f"Excel: {len(source_df)} filas. Comparando..."))
-
             report_df, updates = run_matching(kyte_products, source_df, self._update_cost.get())
             self._q.put(("done_compare", (report_df, updates)))
         except Exception as e:
             self._q.put(("error", str(e)))
+
+    # ── Sync: apply ──────────────────────────────────────────
 
     def _apply_updates(self):
         n = len(self._updates)
         if n == 0:
             messagebox.showinfo("Sin cambios", "No hay precios para actualizar.")
             return
-
-        ok = messagebox.askyesno(
-            "Confirmar",
-            f"Se van a actualizar {n} productos en Kyte.\n¿Continuar?",
-        )
-        if not ok:
+        if not messagebox.askyesno("Confirmar", f"Se van a actualizar {n} productos en Kyte.\nContinuar?"):
             return
-
         self._apply_btn.config(state="disabled")
         self._run_btn.config(state="disabled")
         self._progress["value"] = 0
         self._progress["maximum"] = n
-        self._set_status(f"Actualizando 0/{n}...")
-
         threading.Thread(target=self._worker_apply, args=(list(self._updates),), daemon=True).start()
 
     def _worker_apply(self, updates: list):
         success = 0
         failed = 0
         errors = []
-        n = len(updates)
-
         for i, update in enumerate(updates):
             p = update["product"]
             try:
-                self._client.update_product_price(
-                    p, update["salePrice"], update.get("costPrice")
-                )
+                self._client.update_product_price(p, update["salePrice"], update.get("costPrice"))
                 success += 1
             except KyteAPIError as e:
                 failed += 1
                 errors.append(f"{p.get('name', '?')} ({p.get('code', '?')}): {e}")
-
-            self._q.put(("progress", (i + 1, n)))
-
+            self._q.put(("progress", (i + 1, len(updates))))
         self._q.put(("done_apply", (success, failed, errors)))
 
-    def _run_catalog(self):
-        token = self._get_token()
-        if not token:
-            messagebox.showerror("Error", "Pega el token de Kyte primero.")
+    # ── Catalog: load categories ─────────────────────────────
+
+    def _load_categories(self):
+        result = self._make_client()
+        if result is None:
             return
+        client, _ = result
+        self._cat_client = client
+        self._load_cats_btn.config(state="disabled")
+        self._set_status("Cargando categorias...")
+        threading.Thread(target=self._worker_load_cats, daemon=True).start()
+
+    def _worker_load_cats(self):
         try:
-            uid, aid = parse_kyte_token(token)
+            cats = self._cat_client.get_categories()
+            names = sorted(c.get("name", "") for c in cats if c.get("name"))
+            self._q.put(("cats_loaded", names))
         except Exception as e:
-            messagebox.showerror("Token invalido", str(e))
+            self._q.put(("cats_error", str(e)))
+
+    # ── Catalog: generate ────────────────────────────────────
+
+    def _run_catalog(self):
+        result = self._make_client()
+        if result is None:
             return
+        self._cat_client, uid = result
 
         save_path = filedialog.asksaveasfilename(
             title="Guardar catalogo como",
@@ -483,7 +518,6 @@ class KyteSyncApp(tk.Tk):
         if not save_path:
             return
 
-        self._client = KyteClient(KyteConfig(uid=uid, aid=aid))
         self._cat_btn.config(state="disabled")
         self._cat_progress.start(10)
         self._cat_log.config(state="normal")
@@ -502,11 +536,11 @@ class KyteSyncApp(tk.Tk):
     def _worker_catalog(self, args: dict):
         try:
             self._q.put(("cat_log", "Descargando productos de Kyte..."))
-            products = self._client.get_products()
+            products = self._cat_client.get_products()
             self._q.put(("cat_log", f"  {len(products)} productos obtenidos"))
 
             self._q.put(("cat_log", "Agrupando por categoria..."))
-            session = self._client.session if args["embed_images"] else None
+            session = self._cat_client.session if args["embed_images"] else None
             categories = build_categories(
                 products,
                 uid=args["uid"],
@@ -518,11 +552,10 @@ class KyteSyncApp(tk.Tk):
             total = sum(len(c["products"]) for c in categories)
             self._q.put(("cat_log", f"  {len(categories)} categorias, {total} productos"))
 
-            # Buscar el template relativo al ejecutable
-            base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
-            tmpl_path = base / "catalog_template.html"
+            # Template: sys._MEIPASS cuando es .exe, __file__ en desarrollo
+            tmpl_path = _meipass_dir() / "catalog_template.html"
             if not tmpl_path.exists():
-                raise FileNotFoundError(f"No se encontro catalog_template.html en {base}")
+                raise FileNotFoundError(f"No se encontro catalog_template.html en {tmpl_path.parent}")
 
             self._q.put(("cat_log", "Renderizando HTML..."))
             env = Environment(loader=FileSystemLoader(str(tmpl_path.parent)), autoescape=True)
@@ -546,35 +579,34 @@ class KyteSyncApp(tk.Tk):
         except Exception as e:
             self._q.put(("cat_error", str(e)))
 
+    # ── Download report ──────────────────────────────────────
+
     def _download_report(self):
         if self._report_df is None:
             return
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"reporte_sync_{ts}.xlsx"
         path = filedialog.asksaveasfilename(
             title="Guardar reporte",
             defaultextension=".xlsx",
-            initialfile=default_name,
+            initialfile=f"reporte_sync_{ts}.xlsx",
             filetypes=[("Excel files", "*.xlsx")],
         )
         if not path:
             return
-
         n_update = len(self._report_df[self._report_df["Estado"] == "ACTUALIZAR"])
-        n_ok = len(self._report_df[self._report_df["Estado"] == "OK"])
+        n_ok     = len(self._report_df[self._report_df["Estado"] == "OK"])
         n_nomatch = len(self._report_df[self._report_df["Estado"].isin(["SIN MATCH", "SIN CODIGO"])])
-        n_zero = len(self._report_df[self._report_df["Estado"] == "PRECIO 0"])
+        n_zero   = len(self._report_df[self._report_df["Estado"] == "PRECIO 0"])
         stats = {
             "Metrica": ["A Actualizar", "Sin Cambio", "Precio 0", "Sin Match / Sin Codigo"],
             "Valor": [n_update, n_ok, n_zero, n_nomatch],
         }
-
         data = to_excel_bytes(self._report_df, stats)
         with open(path, "wb") as f:
             f.write(data)
         self._set_status(f"Reporte guardado: {path}")
 
-    # ── Queue polling (UI updates from threads) ──────────────
+    # ── Queue polling ────────────────────────────────────────
 
     def _poll_queue(self):
         try:
@@ -594,13 +626,20 @@ class KyteSyncApp(tk.Tk):
                     self._on_compare_done(payload)
                 elif msg == "done_apply":
                     self._on_apply_done(payload)
+                elif msg == "cats_loaded":
+                    self._cat_combo["values"] = payload
+                    self._load_cats_btn.config(state="normal")
+                    self._set_status(f"{len(payload)} categorias cargadas.")
+                elif msg == "cats_error":
+                    self._load_cats_btn.config(state="normal")
+                    messagebox.showerror("Error", f"No se pudieron cargar categorias: {payload}")
                 elif msg == "cat_log":
                     self._cat_log_append(payload)
                 elif msg == "cat_done":
                     self._cat_progress.stop()
                     self._cat_btn.config(state="normal")
                     self._cat_log_append(f"Listo: {payload}")
-                    if messagebox.askyesno("Catalogo generado", f"Catalogo guardado.\n\n¿Abrir en el browser?"):
+                    if messagebox.askyesno("Catalogo generado", "Catalogo guardado.\n\nAbrir en el browser?"):
                         os.startfile(payload)
                 elif msg == "cat_error":
                     self._cat_progress.stop()
@@ -618,28 +657,24 @@ class KyteSyncApp(tk.Tk):
         self._report_df = report_df
         self._updates = updates
 
-        n_update = len(report_df[report_df["Estado"] == "ACTUALIZAR"])
-        n_ok = len(report_df[report_df["Estado"] == "OK"])
+        n_update  = len(report_df[report_df["Estado"] == "ACTUALIZAR"])
+        n_ok      = len(report_df[report_df["Estado"] == "OK"])
         n_nomatch = len(report_df[report_df["Estado"].isin(["SIN MATCH", "SIN CODIGO"])])
-        n_zero = len(report_df[report_df["Estado"] == "PRECIO 0"])
+        n_zero    = len(report_df[report_df["Estado"] == "PRECIO 0"])
 
         self._stat_vars["update"].set(str(n_update))
         self._stat_vars["ok"].set(str(n_ok))
         self._stat_vars["nomatch"].set(str(n_nomatch))
         self._stat_vars["zero"].set(str(n_zero))
 
-        # Populate trees
-        self._fill_tree(self._trees["update"],
-                        report_df[report_df["Estado"] == "ACTUALIZAR"])
-        self._fill_tree(self._trees["nomatch"],
-                        report_df[report_df["Estado"].isin(["SIN MATCH", "SIN CODIGO", "PRECIO 0"])])
-        self._fill_tree(self._trees["all"], report_df)
+        self._fill_tree(self._trees["update"],  report_df[report_df["Estado"] == "ACTUALIZAR"])
+        self._fill_tree(self._trees["nomatch"], report_df[report_df["Estado"].isin(["SIN MATCH", "SIN CODIGO", "PRECIO 0"])])
+        self._fill_tree(self._trees["all"],     report_df)
 
         self._run_btn.config(state="normal")
         self._dl_btn.config(state="normal")
         if n_update > 0:
-            self._apply_btn.config(state="normal",
-                                   text=f"APLICAR {n_update} ACTUALIZACIONES")
+            self._apply_btn.config(state="normal", text=f"APLICAR {n_update} ACTUALIZACIONES")
         self._set_status(f"Listo. {n_update} a actualizar, {n_ok} sin cambio, {n_nomatch} sin match.")
 
     def _on_apply_done(self, payload):
@@ -650,9 +685,8 @@ class KyteSyncApp(tk.Tk):
             self._set_status(f"{success} productos actualizados correctamente.")
             messagebox.showinfo("Exito", f"{success} productos actualizados.")
         else:
-            msg = f"{success} OK, {failed} fallaron.\n\n" + "\n".join(errors[:10])
             self._set_status(f"{success} OK, {failed} fallaron.")
-            messagebox.showwarning("Parcial", msg)
+            messagebox.showwarning("Parcial", f"{success} OK, {failed} fallaron.\n\n" + "\n".join(errors[:10]))
 
     def _fill_tree(self, tree: ttk.Treeview, df: pd.DataFrame):
         tree.delete(*tree.get_children())
