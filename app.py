@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 
 from kyte_api import KyteClient, KyteConfig, KyteAPIError, parse_kyte_token
+from generate_catalog import build_categories, build_image_url
+from jinja2 import Environment, FileSystemLoader
 
 # ── Page config ──────────────────────────────────────────────
 st.set_page_config(
@@ -17,8 +19,6 @@ st.set_page_config(
 )
 
 st.title("Kyte Price Sync")
-st.caption("Sincroniza precios de productos desde una lista de distribuidor")
-
 
 # ── Sidebar: Config ──────────────────────────────────────────
 st.sidebar.header("Configuracion")
@@ -30,6 +30,9 @@ token = st.sidebar.text_area(
 ).strip()
 
 update_cost = st.sidebar.checkbox("Actualizar costo tambien", value=True)
+
+st.sidebar.divider()
+page = st.sidebar.radio("Modo", ["Sincronizar Precios", "Catalogo de Productos"])
 
 if not token:
     st.info("Pega tu token de Kyte en la barra lateral para comenzar.")
@@ -202,6 +205,74 @@ def to_excel_download(df, stats):
 
 
 # ── Main UI ──────────────────────────────────────────────────
+
+# ════════════════════════════════════════════════════════════
+# CATALOGO
+# ════════════════════════════════════════════════════════════
+if page == "Catalogo de Productos":
+    st.subheader("Catalogo de Productos")
+    st.caption("Genera un catálogo HTML imprimible agrupado por categoría")
+
+    col_a, col_b = st.columns(2)
+    filter_cat = col_a.text_input("Filtrar por categoría (opcional)", placeholder="Ej: Herramientas")
+    show_prices = col_b.checkbox("Mostrar precios en el catálogo", value=True)
+
+    if st.button("Generar catálogo", type="primary"):
+        with st.spinner("Descargando productos de Kyte..."):
+            try:
+                kyte_prods = client.get_products()
+            except KyteAPIError as e:
+                st.error(f"Error de API: {e}")
+                st.stop()
+
+        with st.spinner(f"Armando catálogo de {len(kyte_prods)} productos..."):
+            categories = build_categories(
+                kyte_prods,
+                uid=uid,
+                embed_images=False,
+                filter_category=filter_cat.strip() if filter_cat.strip() else None,
+                show_prices=show_prices,
+            )
+
+        total_cat = sum(len(c["products"]) for c in categories)
+        st.success(f"{len(categories)} categorías · {total_cat} productos")
+
+        # Render template
+        tmpl_path = Path("catalog_template.html")
+        if not tmpl_path.exists():
+            st.error("No se encontró catalog_template.html")
+            st.stop()
+
+        env = Environment(loader=FileSystemLoader("."), autoescape=True)
+        template = env.get_template("catalog_template.html")
+
+        now = datetime.now()
+        months_es = ["enero","febrero","marzo","abril","mayo","junio",
+                     "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+        gen_date = f"{now.day} de {months_es[now.month-1]} de {now.year}"
+
+        html_out = template.render(
+            company_name="MP.TOOLS MAYORISTA",
+            generated_date=gen_date,
+            total_products=total_cat,
+            categories=categories,
+        )
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            label="Descargar catálogo HTML",
+            data=html_out.encode("utf-8"),
+            file_name=f"catalogo_{ts}.html",
+            mime="text/html",
+        )
+        st.info("Para imprimir o guardar como PDF: abrí el archivo en Chrome → Ctrl+P → Guardar como PDF")
+
+    st.stop()
+
+# ════════════════════════════════════════════════════════════
+# SINCRONIZAR PRECIOS
+# ════════════════════════════════════════════════════════════
+
 uploaded = st.file_uploader("Subi la lista de precios del distribuidor", type=["xlsx", "xls"])
 
 if not uploaded:

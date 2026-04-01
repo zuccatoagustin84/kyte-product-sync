@@ -1,0 +1,498 @@
+{#
+  MP.TOOLS MAYORISTA — Catálogo de Productos
+  Template Jinja2. Variables de contexto:
+    company_name    (str)
+    generated_date  (str)
+    total_products  (int)
+    categories      (list de {name: str, products: list})
+    Cada producto:  {name, code, salePrice, image_url, has_image}
+#}
+{%- macro format_price(value) -%}
+${{ "{:,.0f}".format(value) | replace(",", ".") }}
+{%- endmacro -%}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ company_name }} — Lista de Precios</title>
+  <style>
+    /* ─── Reset & Base ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:           #1a1a2e;
+      --navy-mid:       #16213e;
+      --navy-light:     #0f3460;
+      --accent:         #e94560;
+      --accent-light:   #ff6b81;
+      --gray-border:    #e0e0e6;
+      --gray-light:     #f4f4f8;
+      --gray-muted:     #8a8a9a;
+      --card-bg:        #ffffff;
+      --text-primary:   #1a1a2e;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+              "Helvetica Neue", Arial, sans-serif;
+    }
+
+    html { font-size: 14px; }
+    body {
+      font-family: var(--font);
+      background: var(--gray-light);
+      color: var(--text-primary);
+      line-height: 1.4;
+    }
+
+    /* ─── Cover Page ────────────────────────────────────────── */
+    .cover-page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto 2rem;
+      background: linear-gradient(160deg, var(--navy) 0%, var(--navy-mid) 55%, var(--navy-light) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 48px;
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .cover-page::before {
+      content: "";
+      position: absolute;
+      top: -80px; right: -80px;
+      width: 320px; height: 320px;
+      border-radius: 50%;
+      border: 40px solid rgba(233,69,96,0.15);
+    }
+    .cover-page::after {
+      content: "";
+      position: absolute;
+      bottom: -60px; left: -60px;
+      width: 240px; height: 240px;
+      border-radius: 50%;
+      border: 30px solid rgba(255,255,255,0.05);
+    }
+
+    .cover-inner {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      max-width: 480px;
+    }
+
+    .cover-logo-ring {
+      width: 100px; height: 100px;
+      border-radius: 50%;
+      background: rgba(233,69,96,0.18);
+      border: 3px solid rgba(233,69,96,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 32px;
+    }
+
+    .cover-company {
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      color: #ffffff;
+      text-transform: uppercase;
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+    .cover-company span {
+      display: block;
+      font-size: 1.1rem;
+      font-weight: 400;
+      letter-spacing: 0.3em;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+
+    .cover-rule {
+      width: 60px; height: 4px;
+      background: var(--accent);
+      border-radius: 2px;
+      margin: 28px auto;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .cover-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
+    }
+
+    .cover-date {
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.55);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .cover-stats {
+      margin-top: 48px;
+      display: flex;
+      gap: 48px;
+      justify-content: center;
+    }
+    .cover-stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent-light);
+      line-height: 1;
+    }
+    .cover-stat-label {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.45);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+
+    /* ─── Category Section ──────────────────────────────────── */
+    .category-section {
+      width: 210mm;
+      margin: 0 auto 2rem;
+      background: var(--gray-light);
+      page-break-before: always;
+    }
+
+    .category-header {
+      background: var(--navy);
+      color: #ffffff;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .category-header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .category-accent-bar {
+      width: 5px;
+      height: 36px;
+      background: var(--accent);
+      border-radius: 3px;
+      flex-shrink: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .category-name {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .category-count {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.06em;
+      margin-top: 2px;
+    }
+
+    .category-badge {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.8);
+      white-space: nowrap;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ─── Product Grid ──────────────────────────────────────── */
+    .product-grid {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    /* ─── Product Card ──────────────────────────────────────── */
+    .product-card {
+      background: var(--card-bg);
+      border: 1px solid var(--gray-border);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(26,26,46,0.07);
+      display: flex;
+      flex-direction: column;
+    }
+    .product-card:hover {
+      box-shadow: 0 4px 18px rgba(26,26,46,0.14);
+      transform: translateY(-1px);
+      transition: all 0.15s ease;
+    }
+
+    /* Image */
+    .card-image-wrap {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #f8f8fb;
+      overflow: hidden;
+      border-bottom: 1px solid var(--gray-border);
+      position: relative;
+    }
+    .card-image-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .card-image-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #c8c8d8;
+    }
+    .card-image-placeholder svg {
+      width: 48px; height: 48px;
+      opacity: 0.4;
+    }
+    .card-image-placeholder span {
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #c0c0d0;
+    }
+
+    /* Body */
+    .card-body {
+      padding: 10px 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+    }
+    .card-name {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 2.2em;
+    }
+    .card-code {
+      font-size: 0.68rem;
+      color: var(--gray-muted);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      letter-spacing: 0.04em;
+    }
+    .card-price {
+      margin-top: auto;
+      padding-top: 10px;
+    }
+    .card-price-label {
+      display: block;
+      font-size: 0.6rem;
+      font-weight: 400;
+      color: var(--gray-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 1px;
+    }
+    .card-price-value {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    /* ─── Print ─────────────────────────────────────────────── */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 12mm 12mm 18mm 12mm;
+        @bottom-left {
+          content: "{{ company_name }}";
+          font-size: 8pt;
+          color: #8a8a9a;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        @bottom-right {
+          content: "Página " counter(page) " de " counter(pages);
+          font-size: 8pt;
+          color: #8a8a9a;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        @bottom-center {
+          content: "{{ generated_date }}";
+          font-size: 8pt;
+          color: #c0c0d0;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+      }
+
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+      html, body { background: #ffffff; font-size: 10pt; }
+
+      .cover-page {
+        width: 100%; height: 100vh;
+        min-height: 0; margin: 0;
+        page-break-after: always;
+      }
+
+      .category-section {
+        width: 100%; margin: 0;
+        page-break-before: always;
+        page-break-inside: auto;
+      }
+
+      .category-header { page-break-after: avoid; }
+
+      .product-card {
+        box-shadow: none !important;
+        border: 1px solid #d8d8e4;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .product-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 12px;
+      }
+
+      .card-image-wrap { max-height: 130px; }
+      .card-name   { font-size: 7.5pt; }
+      .card-code   { font-size: 6.5pt; }
+      .card-price-value { font-size: 9pt; }
+      .category-name { font-size: 11pt; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ PORTADA ════════════════════════════════════════════════ -->
+<div class="cover-page">
+  <div class="cover-inner">
+
+    <div class="cover-logo-ring">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="52" height="52"
+           fill="none" stroke="#e94560" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+        <!-- wrench -->
+        <path d="M14 50l22-22"/>
+        <path d="M36 28a10 10 0 1 0-10-10c0 2 .6 3.8 1.5 5.3L10 41a3 3 0 0 0 4.2 4.2L31.7 27.5A10 10 0 0 0 36 28z"/>
+        <!-- gear hint -->
+        <circle cx="46" cy="44" r="8"/>
+        <path d="M46 38v-3M46 53v-3M40 44h-3M55 44h-3"/>
+        <circle cx="46" cy="44" r="3"/>
+      </svg>
+    </div>
+
+    <div class="cover-company">
+      MP.TOOLS
+      <span>Mayorista</span>
+    </div>
+
+    <div class="cover-rule"></div>
+
+    <div class="cover-title">Catálogo de Productos</div>
+    <div class="cover-date">{{ generated_date }}</div>
+
+    <div class="cover-stats">
+      <div class="cover-stat">
+        <div class="cover-stat-value">{{ categories | length }}</div>
+        <div class="cover-stat-label">Categorías</div>
+      </div>
+      <div class="cover-stat">
+        <div class="cover-stat-value">{{ total_products }}</div>
+        <div class="cover-stat-label">Productos</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ CATEGORÍAS ════════════════════════════════════════════ -->
+{%- for category in categories %}
+<div class="category-section">
+
+  <div class="category-header">
+    <div class="category-header-left">
+      <div class="category-accent-bar"></div>
+      <div>
+        <div class="category-name">{{ category.name }}</div>
+        <div class="category-count">
+          {{ category.products | length }} producto{% if category.products | length != 1 %}s{% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="category-badge">Lista Mayorista</div>
+  </div>
+
+  <div class="product-grid">
+    {%- for product in category.products %}
+    <div class="product-card">
+
+      <div class="card-image-wrap">
+        {%- if product.has_image and product.image_url %}
+        <img
+          src="{{ product.image_url }}"
+          alt="{{ product.name | e }}"
+          loading="lazy"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+        />
+        <div class="card-image-placeholder" style="display:none">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M32 6L6 20v24l26 14 26-14V20L32 6z"/>
+            <path d="M32 6v38M6 20l26 14 26-14"/>
+          </svg>
+          <span>Sin imagen</span>
+        </div>
+        {%- else %}
+        <div class="card-image-placeholder">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M32 6L6 20v24l26 14 26-14V20L32 6z"/>
+            <path d="M32 6v38M6 20l26 14 26-14"/>
+          </svg>
+          <span>Sin imagen</span>
+        </div>
+        {%- endif %}
+      </div>
+
+      <div class="card-body">
+        <div class="card-name">{{ product.name }}</div>
+        <div class="card-code">Cód: {{ product.code }}</div>
+        <div class="card-price">
+          <span class="card-price-label">Precio mayorista</span>
+          <span class="card-price-value">{{ format_price(product.salePrice) }}</span>
+        </div>
+      </div>
+
+    </div>
+    {%- endfor %}
+  </div>
+
+</div>
+{%- endfor %}
+
+</body>
+</html>
