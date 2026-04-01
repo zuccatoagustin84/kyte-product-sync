@@ -162,15 +162,21 @@ class KyteClient:
         """
         Strip uid/ prefix and ?alt=media suffix from image paths.
         Kyte re-adds these on PUT, so sending them causes duplication.
+        Works on the raw string WITHOUT decoding to preserve %2B, %3D etc.
         """
         if not val:
             return val
-        from urllib.parse import unquote
-        decoded = unquote(val).lstrip("/")
-        while decoded.startswith(uid + "/"):
-            decoded = decoded[len(uid) + 1:]
-        decoded = decoded.split("?")[0]
-        return decoded
+        s = val.lstrip("/")
+        uid_encoded = uid + "%2F"
+        uid_slash = uid + "/"
+        while s.startswith(uid_encoded) or s.startswith(uid_slash):
+            if s.startswith(uid_encoded):
+                s = s[len(uid_encoded):]
+            elif s.startswith(uid_slash):
+                s = s[len(uid_slash):]
+        if "?alt=media" in s:
+            s = s[:s.index("?alt=media")]
+        return s
 
     def _clean_images_for_put(self, product: dict) -> dict:
         """Strip image prefixes so Kyte doesn't double them on PUT."""
