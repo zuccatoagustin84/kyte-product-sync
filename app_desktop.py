@@ -4,7 +4,10 @@ Uso: python app_desktop.py
 Build: pyinstaller --onefile --windowed app_desktop.py
 """
 import io
+import os
 import queue
+import subprocess
+import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
@@ -12,8 +15,10 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from jinja2 import Environment, FileSystemLoader
 
 from kyte_api import KyteClient, KyteConfig, KyteAPIError, parse_kyte_token
+from generate_catalog import build_categories
 
 
 # ── Helpers (misma logica que app.py) ────────────────────────────────────────
@@ -278,6 +283,11 @@ class KyteSyncApp(tk.Tk):
             tree = self._make_tree(frame)
             self._trees[tab_key] = tree
 
+        # Tab Catalogo
+        cat_frame = tk.Frame(notebook, padx=16, pady=16)
+        notebook.add(cat_frame, text="Catalogo")
+        self._build_catalog_tab(cat_frame)
+
         # Action bar
         action = tk.Frame(parent)
         action.pack(fill="x", pady=(8, 0))
@@ -292,6 +302,47 @@ class KyteSyncApp(tk.Tk):
 
         self._progress = ttk.Progressbar(action, length=200, mode="determinate")
         self._progress.pack(side="right", padx=8)
+
+    def _build_catalog_tab(self, parent):
+        tk.Label(parent, text="Generar Catalogo HTML", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(parent, text="Genera un catalogo imprimible por categoria. Abri el HTML en Chrome y usa Ctrl+P para PDF.",
+                 font=("Segoe UI", 9), fg="#555", wraplength=600).pack(anchor="w", pady=(2, 14))
+
+        # Filtro categoria
+        row1 = tk.Frame(parent)
+        row1.pack(fill="x", pady=4)
+        tk.Label(row1, text="Filtrar por categoria (opcional):", font=("Segoe UI", 9)).pack(side="left")
+        self._cat_filter = tk.StringVar()
+        ttk.Entry(row1, textvariable=self._cat_filter, width=30).pack(side="left", padx=8)
+
+        # Opciones
+        row2 = tk.Frame(parent)
+        row2.pack(fill="x", pady=4)
+        self._cat_show_prices = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row2, text="Mostrar precios", variable=self._cat_show_prices).pack(side="left", padx=(0, 16))
+        self._cat_embed = tk.BooleanVar(value=False)
+        ttk.Checkbutton(row2, text="Embeber imagenes (offline, mas lento)",
+                        variable=self._cat_embed).pack(side="left")
+
+        # Boton + progreso
+        row3 = tk.Frame(parent)
+        row3.pack(fill="x", pady=(12, 4))
+        self._cat_btn = ttk.Button(row3, text="Generar catalogo", command=self._run_catalog)
+        self._cat_btn.pack(side="left")
+        self._cat_progress = ttk.Progressbar(row3, mode="indeterminate", length=180)
+        self._cat_progress.pack(side="left", padx=12)
+
+        # Log
+        tk.Label(parent, text="Log:", font=("Segoe UI", 8), fg="#666").pack(anchor="w", pady=(10, 2))
+        self._cat_log = scrolledtext.ScrolledText(parent, height=8, state="disabled",
+                                                   font=("Consolas", 8), fg="#333")
+        self._cat_log.pack(fill="x")
+
+    def _cat_log_append(self, msg: str):
+        self._cat_log.config(state="normal")
+        self._cat_log.insert("end", msg + "\n")
+        self._cat_log.see("end")
+        self._cat_log.config(state="disabled")
 
     def _make_tree(self, parent) -> ttk.Treeview:
         frame = tk.Frame(parent)
@@ -412,6 +463,89 @@ class KyteSyncApp(tk.Tk):
 
         self._q.put(("done_apply", (success, failed, errors)))
 
+    def _run_catalog(self):
+        token = self._get_token()
+        if not token:
+            messagebox.showerror("Error", "Pega el token de Kyte primero.")
+            return
+        try:
+            uid, aid = parse_kyte_token(token)
+        except Exception as e:
+            messagebox.showerror("Token invalido", str(e))
+            return
+
+        save_path = filedialog.asksaveasfilename(
+            title="Guardar catalogo como",
+            defaultextension=".html",
+            initialfile=f"catalogo_{datetime.now().strftime('%Y%m%d')}.html",
+            filetypes=[("HTML files", "*.html")],
+        )
+        if not save_path:
+            return
+
+        self._client = KyteClient(KyteConfig(uid=uid, aid=aid))
+        self._cat_btn.config(state="disabled")
+        self._cat_progress.start(10)
+        self._cat_log.config(state="normal")
+        self._cat_log.delete("1.0", "end")
+        self._cat_log.config(state="disabled")
+
+        args = {
+            "uid": uid,
+            "filter_category": self._cat_filter.get().strip() or None,
+            "embed_images": self._cat_embed.get(),
+            "show_prices": self._cat_show_prices.get(),
+            "save_path": save_path,
+        }
+        threading.Thread(target=self._worker_catalog, args=(args,), daemon=True).start()
+
+    def _worker_catalog(self, args: dict):
+        try:
+            self._q.put(("cat_log", "Descargando productos de Kyte..."))
+            products = self._client.get_products()
+            self._q.put(("cat_log", f"  {len(products)} productos obtenidos"))
+
+            self._q.put(("cat_log", "Agrupando por categoria..."))
+            session = self._client.session if args["embed_images"] else None
+            categories = build_categories(
+                products,
+                uid=args["uid"],
+                embed_images=args["embed_images"],
+                session=session,
+                filter_category=args["filter_category"],
+                show_prices=args["show_prices"],
+            )
+            total = sum(len(c["products"]) for c in categories)
+            self._q.put(("cat_log", f"  {len(categories)} categorias, {total} productos"))
+
+            # Buscar el template relativo al ejecutable
+            base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+            tmpl_path = base / "catalog_template.html"
+            if not tmpl_path.exists():
+                raise FileNotFoundError(f"No se encontro catalog_template.html en {base}")
+
+            self._q.put(("cat_log", "Renderizando HTML..."))
+            env = Environment(loader=FileSystemLoader(str(tmpl_path.parent)), autoescape=True)
+            template = env.get_template(tmpl_path.name)
+
+            months_es = ["enero","febrero","marzo","abril","mayo","junio",
+                         "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+            now = datetime.now()
+            gen_date = f"{now.day} de {months_es[now.month-1]} de {now.year}"
+
+            html = template.render(
+                company_name="MP.TOOLS MAYORISTA",
+                generated_date=gen_date,
+                total_products=total,
+                categories=categories,
+            )
+
+            Path(args["save_path"]).write_text(html, encoding="utf-8")
+            self._q.put(("cat_done", args["save_path"]))
+
+        except Exception as e:
+            self._q.put(("cat_error", str(e)))
+
     def _download_report(self):
         if self._report_df is None:
             return
@@ -460,6 +594,19 @@ class KyteSyncApp(tk.Tk):
                     self._on_compare_done(payload)
                 elif msg == "done_apply":
                     self._on_apply_done(payload)
+                elif msg == "cat_log":
+                    self._cat_log_append(payload)
+                elif msg == "cat_done":
+                    self._cat_progress.stop()
+                    self._cat_btn.config(state="normal")
+                    self._cat_log_append(f"Listo: {payload}")
+                    if messagebox.askyesno("Catalogo generado", f"Catalogo guardado.\n\n¿Abrir en el browser?"):
+                        os.startfile(payload)
+                elif msg == "cat_error":
+                    self._cat_progress.stop()
+                    self._cat_btn.config(state="normal")
+                    self._cat_log_append(f"ERROR: {payload}")
+                    messagebox.showerror("Error", payload)
         except queue.Empty:
             pass
         self.after(100, self._poll_queue)

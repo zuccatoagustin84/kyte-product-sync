@@ -33,30 +33,17 @@ FIREBASE_STORAGE_BASE = "https://firebasestorage.googleapis.com/v0/b/kyte-7c484.
 def build_image_url(raw: str, uid: str) -> str | None:
     """
     Construye la URL completa de Firebase Storage a partir del campo image del producto.
-    El campo puede venir como:
-      - "{uid}/{path}?alt=media"
-      - "{uid}%2F{path}?alt=media"
-      - Ya con URL completa (https://...)
+    El campo viene como: "/{uid}%2F{encoded_filename}?alt=media"
+    Solo hay que quitar el / inicial y pegar la base de Firebase.
     """
     if not raw:
         return None
     raw = raw.strip()
     if raw.startswith("http"):
         return raw
-
-    # Quitar ?alt=media del final para recodificar el path
-    path = raw
-    if "?alt=media" in path:
-        path = path[:path.index("?alt=media")]
-
-    # El path puede tener el uid como prefijo (normal) o no
-    # Siempre lo incluimos al construir la URL
-    if not path.startswith(uid):
-        path = f"{uid}/{path}"
-
-    # URL-encode las barras para Firebase Storage (/→%2F)
-    encoded = path.replace("/", "%2F")
-    return f"{FIREBASE_STORAGE_BASE}/{encoded}?alt=media"
+    # El path ya viene URL-encoded, solo sacamos el / inicial
+    path = raw.lstrip("/")
+    return f"{FIREBASE_STORAGE_BASE}/{path}"
 
 
 def fetch_image_as_base64(url: str, session: requests.Session, timeout: int = 8) -> str | None:
@@ -195,8 +182,8 @@ def generate_catalog(
     # Write output
     out_path = Path(output)
     out_path.write_text(html, encoding="utf-8")
-    print(f"\nCatálogo generado: {out_path.resolve()}")
-    print(f"  Para imprimir/PDF: abrí en Chrome → Archivo → Imprimir → Guardar como PDF")
+    print(f"\nCatalogo generado: {out_path.resolve()}")
+    print(f"  Para imprimir/PDF: abri en Chrome > Archivo > Imprimir > Guardar como PDF")
     return out_path
 
 
