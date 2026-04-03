@@ -42,6 +42,10 @@ function UserMenu() {
     .map((w: string) => w[0]?.toUpperCase() ?? "")
     .join("");
 
+  const isAdmin =
+    profile?.role === "admin" ||
+    user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
   async function handleSignOut() {
     setOpen(false);
     await signOut();
@@ -63,7 +67,7 @@ function UserMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 w-44 bg-white rounded-xl shadow-xl ring-1 ring-gray-200 overflow-hidden z-50">
+        <div className="absolute right-0 top-10 w-48 bg-white rounded-xl shadow-xl ring-1 ring-gray-200 overflow-hidden z-50">
           <div className="px-3 py-2 border-b border-gray-100">
             <p className="text-xs text-gray-400 truncate">{user.email}</p>
           </div>
@@ -74,6 +78,16 @@ function UserMenu() {
           >
             Mi perfil
           </Link>
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-orange-50 transition-colors"
+              style={{ color: "var(--brand)" }}
+              onClick={() => setOpen(false)}
+            >
+              ⚙ Administrar
+            </Link>
+          )}
           <button
             onClick={handleSignOut}
             className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"

@@ -53,6 +53,56 @@ test.describe("Carrito", () => {
   });
 });
 
+test.describe("Auth", () => {
+  test("página de login carga con Google y formulario", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page.getByRole("heading", { name: "Iniciar sesión" })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole("button", { name: /Continuar con Google/i })).toBeVisible();
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByLabel("Contraseña")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Olvidaste tu/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Registrarse", exact: true })).toBeVisible();
+  });
+
+  test("página de registro carga con Google y campos", async ({ page }) => {
+    await page.goto("/registro");
+    await expect(page.getByRole("heading", { name: "Crear cuenta" })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole("button", { name: /Continuar con Google/i })).toBeVisible();
+    await expect(page.getByLabel(/Nombre completo/)).toBeVisible();
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByLabel("Contraseña")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Iniciar sesión/i })).toBeVisible();
+  });
+
+  test("recuperar contraseña carga correctamente", async ({ page }) => {
+    await page.goto("/recuperar");
+    await expect(page.getByRole("heading", { name: "Recuperar contraseña" })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Enviar link" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Volver al inicio/i })).toBeVisible();
+  });
+
+  test("verificar page carga con mensaje de email", async ({ page }) => {
+    await page.goto("/verificar?email=test@example.com");
+    await expect(page.getByRole("heading", { name: "Revisá tu email" })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText("test@example.com")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reenviar email" })).toBeVisible();
+  });
+
+  test("login con credenciales incorrectas muestra error", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Email").fill("inexistente@test.com");
+    await page.getByLabel("Contraseña").fill("wrongpassword");
+    await page.getByRole("button", { name: "Iniciar sesión" }).click();
+    await expect(page.getByText(/Email o contraseña incorrectos/i)).toBeVisible({ timeout: 8000 });
+  });
+
+  test("/admin redirige a login si no está autenticado", async ({ page }) => {
+    await page.goto("/admin");
+    await expect(page).toHaveURL(/\/login/, { timeout: 8000 });
+  });
+});
+
 test.describe("API", () => {
   test("GET /api/categories devuelve categorías", async ({ request }) => {
     const res = await request.get("/api/categories");

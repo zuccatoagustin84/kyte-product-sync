@@ -1,21 +1,69 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Turnstile } from "@marsidev/react-turnstile";
 import { signUp } from "@/lib/auth-client";
+import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 
-export default function RegistroPage() {
-  const router = useRouter();
+function GoogleIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+    </svg>
+  );
+}
 
+function getPasswordStrength(password: string): {
+  level: 0 | 1 | 2 | 3;
+  label: string;
+  color: string;
+} {
+  if (password.length === 0) return { level: 0, label: "", color: "" };
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSpecial = /[^a-zA-Z0-9]/.test(password);
+  const variety = [hasLower, hasUpper, hasDigit, hasSpecial].filter(Boolean).length;
+
+  if (password.length < 6 || variety < 2) {
+    return { level: 1, label: "Débil", color: "#ef4444" };
+  }
+  if (password.length < 10 || variety < 3) {
+    return { level: 2, label: "Media", color: "#f59e0b" };
+  }
+  return { level: 3, label: "Fuerte", color: "#22c55e" };
+}
+
+export default function RegistroPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [company, setCompany] = useState("");
   const [phone, setPhone] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const strength = getPasswordStrength(password);
+
+  async function handleGoogle() {
+    setGoogleLoading(true);
+    setError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin + "/" },
+    });
+    if (error) {
+      setError("Google no está disponible por el momento. Usá email y contraseña.");
+      setGoogleLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,7 +81,8 @@ export default function RegistroPage() {
       password,
       fullName,
       company || undefined,
-      phone || undefined
+      phone || undefined,
+      captchaToken || undefined
     );
 
     if (error) {
@@ -46,8 +95,7 @@ export default function RegistroPage() {
       return;
     }
 
-    router.push("/?bienvenido=1");
-    router.refresh();
+    window.location.href = "/verificar?email=" + encodeURIComponent(email.trim());
   }
 
   return (
@@ -57,13 +105,29 @@ export default function RegistroPage() {
         Registrate para acceder al catálogo mayorista
       </p>
 
+      {/* Google sign-up button */}
+      <button
+        type="button"
+        onClick={handleGoogle}
+        disabled={googleLoading || loading}
+        className="w-full h-12 flex items-center justify-center gap-3 border-2 border-gray-200 rounded-xl bg-white hover:bg-gray-50 hover:border-gray-300 transition-all font-medium text-gray-700 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        <GoogleIcon />
+        {googleLoading ? "Redirigiendo..." : "Continuar con Google"}
+      </button>
+
+      {/* Divider */}
+      <div className="flex items-center gap-3 my-5">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-xs text-gray-400 font-medium">o registrate con email</span>
+        <div className="flex-1 h-px bg-gray-200" />
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {/* Full name */}
         <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="fullName"
-            className="text-sm font-medium text-gray-700"
-          >
-            Nombre completo <span className="text-red-500">*</span>
+          <label htmlFor="fullName" className="text-sm font-medium text-gray-700">
+            Nombre completo <span className="text-red-400">*</span>
           </label>
           <Input
             id="fullName"
@@ -73,12 +137,14 @@ export default function RegistroPage() {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="Juan Pérez"
+            className="h-12 rounded-xl"
           />
         </div>
 
+        {/* Email */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="email" className="text-sm font-medium text-gray-700">
-            Email <span className="text-red-500">*</span>
+            Email <span className="text-red-400">*</span>
           </label>
           <Input
             id="email"
@@ -88,15 +154,14 @@ export default function RegistroPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="tu@email.com"
+            className="h-12 rounded-xl"
           />
         </div>
 
+        {/* Password with strength bar */}
         <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="password"
-            className="text-sm font-medium text-gray-700"
-          >
-            Contraseña <span className="text-red-500">*</span>
+          <label htmlFor="password" className="text-sm font-medium text-gray-700">
+            Contraseña <span className="text-red-400">*</span>
           </label>
           <Input
             id="password"
@@ -107,16 +172,36 @@ export default function RegistroPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Mínimo 6 caracteres"
+            className="h-12 rounded-xl"
           />
+          {password.length > 0 && (
+            <div className="flex items-center gap-2 mt-1">
+              <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width:
+                      strength.level === 1
+                        ? "33%"
+                        : strength.level === 2
+                        ? "66%"
+                        : "100%",
+                    backgroundColor: strength.color,
+                  }}
+                />
+              </div>
+              <span className="text-xs font-medium" style={{ color: strength.color }}>
+                {strength.label}
+              </span>
+            </div>
+          )}
         </div>
 
+        {/* Company (optional) */}
         <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="company"
-            className="text-sm font-medium text-gray-700"
-          >
+          <label htmlFor="company" className="text-sm font-medium text-gray-700">
             Empresa / Negocio{" "}
-            <span className="text-gray-400 font-normal">(opcional)</span>
+            <span className="text-gray-400 font-normal text-xs">(opcional)</span>
           </label>
           <Input
             id="company"
@@ -125,13 +210,15 @@ export default function RegistroPage() {
             value={company}
             onChange={(e) => setCompany(e.target.value)}
             placeholder="Nombre del negocio"
+            className="h-12 rounded-xl"
           />
         </div>
 
+        {/* Phone (optional) */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="phone" className="text-sm font-medium text-gray-700">
             Teléfono{" "}
-            <span className="text-gray-400 font-normal">(opcional)</span>
+            <span className="text-gray-400 font-normal text-xs">(opcional)</span>
           </label>
           <Input
             id="phone"
@@ -140,6 +227,7 @@ export default function RegistroPage() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+54 9 11 1234-5678"
+            className="h-12 rounded-xl"
           />
         </div>
 
@@ -149,11 +237,19 @@ export default function RegistroPage() {
           </p>
         )}
 
+        {/* Turnstile CAPTCHA */}
+        <div className="flex justify-center">
+          <Turnstile
+            siteKey="1x00000000000000000000AA"
+            onSuccess={setCaptchaToken}
+          />
+        </div>
+
         <button
           type="submit"
-          disabled={loading}
-          className="mt-1 w-full h-10 rounded-lg font-semibold text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          style={{ backgroundColor: loading ? "#c44d02" : "var(--brand)" }}
+          disabled={loading || googleLoading}
+          className="w-full h-12 rounded-xl text-base font-semibold text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{ backgroundColor: loading ? "#c44d02" : "var(--brand, #ea580c)" }}
         >
           {loading ? "Creando cuenta..." : "Crear cuenta"}
         </button>
@@ -164,7 +260,7 @@ export default function RegistroPage() {
         <Link
           href="/login"
           className="font-medium hover:underline"
-          style={{ color: "var(--brand)" }}
+          style={{ color: "var(--brand, #ea580c)" }}
         >
           Iniciar sesión
         </Link>
