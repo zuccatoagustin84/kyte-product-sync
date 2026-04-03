@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCartStore } from "@/lib/cart-store";
 import { formatPrice } from "@/lib/format";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 interface OrderFormProps {
   onBack: () => void;
@@ -23,6 +24,7 @@ interface OrderResult {
   customerName: string;
   customerCompany: string;
   customerPhone: string;
+  waMessage: string;
 }
 
 const WHATSAPP_PHONE = "5491156742847";
@@ -57,12 +59,13 @@ export function OrderForm({ onBack }: OrderFormProps) {
   const total = useCartStore((state) => state.total);
   const clearCart = useCartStore((state) => state.clearCart);
   const closeCart = useCartStore((state) => state.closeCart);
+  const { user, profile } = useAuth();
 
   const [form, setForm] = useState<FormData>({
-    customer_name: "",
-    customer_company: "",
-    customer_phone: "",
-    customer_email: "",
+    customer_name: profile?.full_name ?? "",
+    customer_company: profile?.company ?? "",
+    customer_phone: profile?.phone ?? "",
+    customer_email: user?.email ?? "",
     notes: "",
   });
 
@@ -125,13 +128,21 @@ export function OrderForm({ onBack }: OrderFormProps) {
         throw new Error(data.error || "Error al enviar el pedido");
       }
 
+      // Capture items + message BEFORE clearCart empties the store
+      const snapshotItems = items.map((item) => ({
+        name: item.product.name,
+        quantity: item.quantity,
+        subtotal: item.product.sale_price * item.quantity,
+      }));
+      const waMsg = buildWhatsAppMessage(snapshotItems, orderTotal, form);
+      clearCart();
       setResult({
         orderId: data.orderId,
         customerName: form.customer_name.trim(),
         customerCompany: form.customer_company.trim(),
         customerPhone: form.customer_phone.trim(),
+        waMessage: waMsg,
       });
-      clearCart();
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : "Error al enviar el pedido"
@@ -143,16 +154,7 @@ export function OrderForm({ onBack }: OrderFormProps) {
 
   // Success state
   if (result) {
-    const waMessage = buildWhatsAppMessage(
-      items.map((item) => ({
-        name: item.product.name,
-        quantity: item.quantity,
-        subtotal: item.product.sale_price * item.quantity,
-      })),
-      orderTotal,
-      form
-    );
-    const waUrl = `https://wa.me/${WHATSAPP_PHONE}?text=${waMessage}`;
+    const waUrl = `https://wa.me/${WHATSAPP_PHONE}?text=${result.waMessage}`;
 
     return (
       <div className="flex flex-col items-center justify-center flex-1 gap-6 px-4 py-8 text-center">

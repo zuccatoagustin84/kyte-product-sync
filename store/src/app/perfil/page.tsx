@@ -3,6 +3,7 @@ import { getUser, createSupabaseServer } from "@/lib/supabase-server";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SignOutButton from "./SignOutButton";
+import ProfileEditForm from "./ProfileEditForm";
 
 interface Order {
   id: string;
@@ -132,28 +133,12 @@ export default async function PerfilPage() {
 
           <Separator className="my-5" />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-xs text-gray-400 uppercase font-medium mb-0.5">
-                Empresa / Negocio
-              </p>
-              <p className="text-gray-800">
-                {profile?.company ?? (
-                  <span className="text-gray-400 italic">No especificado</span>
-                )}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 uppercase font-medium mb-0.5">
-                Teléfono
-              </p>
-              <p className="text-gray-800">
-                {profile?.phone ?? (
-                  <span className="text-gray-400 italic">No especificado</span>
-                )}
-              </p>
-            </div>
-          </div>
+          <ProfileEditForm
+            userId={user.id}
+            initialName={profile?.full_name ?? null}
+            initialCompany={profile?.company ?? null}
+            initialPhone={profile?.phone ?? null}
+          />
         </section>
 
         {/* Order history */}
