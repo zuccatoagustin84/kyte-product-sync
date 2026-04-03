@@ -23,5 +23,5 @@ jobs:
         working-directory: ./web
         run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_WEB }}
+          VERCEL_ORG_ID: team_4QxOPiKZSoH4D5ue8s893H2w
+          VERCEL_PROJECT_ID: prj_OJ9jim7Xbx2yEvNd8iTMbuQqyfdy
