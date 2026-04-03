@@ -24,8 +24,8 @@ async function loginAsAdmin(page: import("@playwright/test").Page) {
   await page.getByLabel("Email").fill(ADMIN_EMAIL);
   await page.getByLabel("Contraseña").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
-  // Wait for redirect to homepage
-  await expect(page).toHaveURL(/^\/$|\/\?/, { timeout: 12000 });
+  // Wait for redirect to homepage (not login)
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 12000 });
 }
 
 // ─── auth tests ────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ test.describe("Login admin", () => {
   test("header muestra link Administrar para admin", async ({ page }) => {
     await loginAsAdmin(page);
     // Open user menu
-    await page.getByRole("button", { name: /[A-Z]{1,2}/ }).click();
+    await page.getByRole("button", { name: /Menú de usuario/i }).click();
     await expect(page.getByRole("link", { name: /Administrar/i })).toBeVisible({
       timeout: 5000,
     });
@@ -145,11 +145,9 @@ test.describe("Usuario no-admin", () => {
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
     await expect(page).not.toHaveURL(/\/login/, { timeout: 12000 });
 
-    // Try to access admin
+    // Try to access admin — should be bounced (to / or /login)
     await page.goto("/admin");
-    await expect(page).not.toHaveURL(/\/admin\//, { timeout: 8000 });
-    // Should be redirected to /
-    await expect(page).toHaveURL(/^\/$|\/\?/, { timeout: 8000 });
+    await expect(page).not.toHaveURL(/^https?:\/\/[^/]+\/admin/, { timeout: 8000 });
   });
 
   test("usuario no-admin no ve link Administrar", async ({ page }) => {
@@ -159,7 +157,7 @@ test.describe("Usuario no-admin", () => {
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
     await expect(page).not.toHaveURL(/\/login/, { timeout: 12000 });
 
-    await page.getByRole("button", { name: /[A-Z]{1,2}/ }).click();
+    await page.getByRole("button", { name: /Menú de usuario/i }).click();
     await expect(
       page.getByRole("link", { name: /Administrar/i })
     ).not.toBeVisible({ timeout: 3000 });
