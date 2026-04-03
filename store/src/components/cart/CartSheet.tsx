@@ -54,30 +54,37 @@ export function CartSheet() {
         ) : (
           <>
             {/* Header */}
-            <SheetHeader className="px-4 pt-4 pb-3 border-b border-gray-100">
+            <SheetHeader className="px-5 pt-5 pb-4 border-b border-[#e5e7eb]">
               <div className="flex items-center justify-between">
-                <SheetTitle className="text-base font-semibold text-gray-900">
-                  Mi Pedido
+                <div>
+                  <SheetTitle className="text-base font-bold text-[#111827]">
+                    Mi Pedido
+                    {count > 0 && (
+                      <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#e85d04] text-white text-xs font-bold leading-none">
+                        {count}
+                      </span>
+                    )}
+                  </SheetTitle>
                   {count > 0 && (
-                    <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#e85d04] text-white text-xs font-bold leading-none">
-                      {count}
-                    </span>
+                    <p className="text-xs text-[#9ca3af] mt-0.5">
+                      {count} {count === 1 ? "producto" : "productos"}
+                    </p>
                   )}
-                </SheetTitle>
+                </div>
               </div>
             </SheetHeader>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto bg-[#f8f9fa]">
               {items.length === 0 ? (
                 <EmptyCart onClose={closeCart} />
               ) : (
-                <div className="px-4">
+                <div className="px-4 py-2">
                   {items.map((item, index) => (
                     <div key={item.product.id}>
                       <CartItemRow item={item} />
                       {index < items.length - 1 && (
-                        <Separator />
+                        <Separator className="border-[#e5e7eb]" />
                       )}
                     </div>
                   ))}
@@ -87,16 +94,16 @@ export function CartSheet() {
 
             {/* Footer */}
             {items.length > 0 && (
-              <div className="border-t border-gray-100 px-4 py-4 space-y-3 bg-white">
+              <div className="border-t border-[#e5e7eb] px-5 py-5 space-y-4 bg-white">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Total</span>
-                  <span className="text-xl font-bold text-gray-900">
+                  <span className="text-sm font-medium text-[#6b7280]">Total del pedido</span>
+                  <span className="text-2xl font-black text-[#111827]">
                     {formatPrice(orderTotal)}
                   </span>
                 </div>
                 <button
                   onClick={handleConfirm}
-                  className="w-full h-11 flex items-center justify-center rounded-xl bg-[#e85d04] text-white font-semibold text-sm hover:bg-[#c94e03] active:scale-[0.98] transition-all"
+                  className="w-full h-12 flex items-center justify-center rounded-xl bg-[#e85d04] text-white font-bold text-sm hover:bg-[#c94e03] active:scale-[0.98] transition-all shadow-md"
                 >
                   Confirmar Pedido
                 </button>
@@ -112,9 +119,9 @@ export function CartSheet() {
 function EmptyCart({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center flex-1 gap-5 px-6 py-16 text-center h-full min-h-[300px]">
-      <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center">
+      <div className="w-20 h-20 rounded-full bg-white border border-[#e5e7eb] flex items-center justify-center" style={{ boxShadow: "var(--shadow-sm)" }}>
         <svg
-          className="w-10 h-10 text-gray-300"
+          className="w-10 h-10 text-[#d1d5db]"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -129,16 +136,16 @@ function EmptyCart({ onClose }: { onClose: () => void }) {
         </svg>
       </div>
       <div>
-        <p className="text-base font-semibold text-gray-700">
+        <p className="text-base font-bold text-[#111827]">
           Tu pedido está vacío
         </p>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-[#6b7280] mt-1">
           Agregá productos del catálogo para comenzar
         </p>
       </div>
       <button
         onClick={onClose}
-        className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        className="px-5 py-2.5 rounded-full border border-[#e5e7eb] text-sm font-semibold text-[#6b7280] hover:bg-orange-50 hover:text-[#e85d04] hover:border-[#e85d04] transition-all duration-200"
       >
         Ver catálogo
       </button>

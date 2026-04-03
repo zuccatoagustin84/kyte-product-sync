@@ -16,6 +16,9 @@ export interface Product {
   description: string | null;
   active: boolean;
   sort_order: number;
+  stock: number | null;
+  min_order: number | null;
+  slug: string | null;
   category?: Category;
 }
 

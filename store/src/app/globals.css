@@ -7,6 +7,11 @@
   --brand-dark: #c44d02;
   --navy: #1a1a2e;
   --navy-light: #16213e;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.07);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 10px 25px -3px rgb(0 0 0 / 0.1), 0 4px 10px -4px rgb(0 0 0 / 0.08);
 }
 
 @custom-variant dark (&:is(.dark *));
@@ -133,5 +138,64 @@
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
   }
+
+  /* Global smooth transitions */
+  a, button {
+    @apply transition-all duration-200;
+  }
+
+  /* Better focus ring */
+  *:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUpFadeOut {
+  0%   { opacity: 0; transform: translateY(16px); }
+  15%  { opacity: 1; transform: translateY(0); }
+  80%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s ease both;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.35s ease both;
+}
+
+.animate-toast {
+  animation: slideUpFadeOut 3.2s ease forwards;
 }

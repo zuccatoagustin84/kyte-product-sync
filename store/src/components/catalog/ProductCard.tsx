@@ -1,11 +1,13 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
 import { useCartStore } from "@/lib/cart-store";
 import { cn } from "@/lib/utils";
+import { toast } from "@/components/ui/toast";
 
 interface ProductCardProps {
   product: Product;
@@ -26,63 +28,98 @@ export function ProductCard({ product }: ProductCardProps) {
   const inCart = items.find((i) => i.product.id === product.id)?.quantity ?? 0;
   const [added, setAdded] = useState(false);
 
+  const isOnSale =
+    product.cost_price != null &&
+    product.cost_price > 0 &&
+    product.sale_price < product.cost_price;
+
   const handleAdd = () => {
     addItem(product);
     setAdded(true);
+    toast("Producto agregado al carrito", "success");
     setTimeout(() => setAdded(false), 1200);
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden border border-gray-100">
+    <div
+      className="group bg-white rounded-2xl border border-[#e5e7eb] flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1"
+      style={{ boxShadow: "var(--shadow-sm)" }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = "var(--shadow-lg)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = "var(--shadow-sm)";
+      }}
+    >
       {/* Image */}
-      <div className="relative w-full aspect-square bg-gray-100 shrink-0">
+      <Link
+        href={`/p/${product.id}`}
+        className="block relative w-full aspect-square bg-gray-50 shrink-0 overflow-hidden"
+      >
         {product.image_url ? (
           <Image
             src={product.image_url}
             alt={product.name}
             fill
             sizes="(max-width: 768px) 50vw, 25vw"
-            className="object-cover"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
             unoptimized
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-50">
             <span className="text-2xl font-bold text-gray-300">
               {getInitials(product.name)}
             </span>
           </div>
         )}
+
+        {/* Sale badge */}
+        {isOnSale && (
+          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide text-white bg-[#ef4444] shadow-sm">
+            Oferta
+          </span>
+        )}
+
+        {/* Cart count badge */}
         {inCart > 0 && (
-          <span className="absolute top-1.5 right-1.5 min-w-[22px] h-[22px] px-1 flex items-center justify-center rounded-full bg-[#e85d04] text-white text-xs font-bold leading-none shadow">
+          <span className="absolute top-2 right-2 min-w-[22px] h-[22px] px-1 flex items-center justify-center rounded-full bg-[#e85d04] text-white text-xs font-bold leading-none shadow">
             {inCart}
           </span>
         )}
-      </div>
+      </Link>
 
       {/* Info */}
-      <div className="flex flex-col flex-1 p-3 gap-1">
-        <p
-          className="text-xs font-medium line-clamp-2 text-gray-800 leading-snug"
-          title={product.name}
-        >
-          {product.name}
-        </p>
+      <div className="flex flex-col flex-1 p-3 gap-1.5">
+        <Link href={`/p/${product.id}`} className="block">
+          <p
+            className="text-sm font-semibold line-clamp-2 text-[#111827] leading-snug hover:text-[#e85d04] transition-colors"
+            title={product.name}
+          >
+            {product.name}
+          </p>
+        </Link>
         {product.code && (
-          <p className="text-[11px] text-gray-400 truncate">{product.code}</p>
+          <p className="font-mono text-[11px] text-[#9ca3af] truncate">
+            {product.code}
+          </p>
         )}
 
         <p
-          className="text-base font-bold mt-auto pt-1"
+          className="text-lg font-black mt-auto pt-1"
           style={{ color: "var(--brand)" }}
         >
           {formatPrice(product.sale_price)}
         </p>
 
         <button
-          onClick={handleAdd}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleAdd();
+          }}
           className={cn(
-            "mt-1 w-full py-1.5 rounded-lg text-xs font-semibold text-white transition-colors",
-            added ? "bg-green-500" : ""
+            "mt-1 w-full py-2 rounded-full text-xs font-semibold text-white transition-all duration-200 active:scale-95",
+            added ? "bg-[#10b981]" : ""
           )}
           style={!added ? { backgroundColor: "var(--brand)" } : {}}
           onMouseEnter={(e) => {

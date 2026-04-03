@@ -25,7 +25,8 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
 
   return (
     <div className="relative w-full">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+      {/* Search icon */}
+      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9ca3af] pointer-events-none">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           className="w-4 h-4"
@@ -41,23 +42,40 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
           />
         </svg>
       </span>
+
       <input
         type="text"
         value={local}
         onChange={(e) => setLocal(e.target.value)}
         placeholder="Buscar producto..."
         className={cn(
-          "w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white",
-          "text-sm placeholder-gray-400 text-gray-800",
-          "focus:outline-none focus:ring-2 focus:border-transparent transition-shadow",
-          "shadow-sm"
+          "w-full h-12 pl-11 rounded-2xl border border-[#e5e7eb] bg-white",
+          "text-sm placeholder-[#9ca3af] text-[#111827]",
+          "focus:outline-none focus:ring-2 focus:ring-[#e85d04] focus:border-transparent transition-all duration-200",
+          local ? "pr-10" : "pr-4"
         )}
-        style={
-          {
-            "--tw-ring-color": "var(--brand)",
-          } as React.CSSProperties
-        }
+        style={{ boxShadow: "var(--shadow-sm)" }}
       />
+
+      {/* Clear button */}
+      {local && (
+        <button
+          type="button"
+          onClick={() => setLocal("")}
+          className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 hover:bg-gray-300 text-gray-500 transition-colors"
+          aria-label="Limpiar búsqueda"
+        >
+          <svg
+            className="w-3 h-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
