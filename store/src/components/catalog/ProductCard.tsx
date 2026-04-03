@@ -75,7 +75,10 @@ export function ProductCard({ product }: ProductCardProps) {
 
         {/* Sale badge */}
         {isOnSale && (
-          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide text-white bg-[#ef4444] shadow-sm">
+          <span
+            className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest text-white bg-[#ef4444] shadow-sm"
+            style={{ fontFamily: "var(--font-jakarta)" }}
+          >
             Oferta
           </span>
         )}
@@ -92,21 +95,22 @@ export function ProductCard({ product }: ProductCardProps) {
       <div className="flex flex-col flex-1 p-3 gap-1.5">
         <Link href={`/p/${product.id}`} className="block">
           <p
-            className="text-sm font-semibold line-clamp-2 text-[#111827] leading-snug hover:text-[#e85d04] transition-colors"
+            className="text-[13px] font-semibold line-clamp-2 text-[#111827] leading-snug tracking-[-0.01em] hover:text-[#e85d04] transition-colors"
+            style={{ fontFamily: "var(--font-jakarta)" }}
             title={product.name}
           >
             {product.name}
           </p>
         </Link>
         {product.code && (
-          <p className="font-mono text-[11px] text-[#9ca3af] truncate">
+          <p className="font-mono text-[10px] text-[#b0b5bf] tracking-wide uppercase truncate">
             {product.code}
           </p>
         )}
 
         <p
-          className="text-lg font-black mt-auto pt-1"
-          style={{ color: "var(--brand)" }}
+          className="text-lg font-extrabold mt-auto pt-1 tracking-tight"
+          style={{ color: "var(--brand)", fontFamily: "var(--font-jakarta)" }}
         >
           {formatPrice(product.sale_price)}
         </p>
@@ -118,7 +122,7 @@ export function ProductCard({ product }: ProductCardProps) {
             handleAdd();
           }}
           className={cn(
-            "mt-1 w-full py-2 rounded-full text-xs font-semibold text-white transition-all duration-200 active:scale-95",
+            "mt-1 w-full py-2 rounded-full text-xs font-bold text-white tracking-tight transition-all duration-200 active:scale-95",
             added ? "bg-[#10b981]" : ""
           )}
           style={!added ? { backgroundColor: "var(--brand)" } : {}}

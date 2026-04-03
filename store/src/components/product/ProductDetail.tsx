@@ -129,21 +129,34 @@ export function ProductDetail({ product }: ProductDetailProps) {
 
           {/* Category badge */}
           {category && (
-            <span className="inline-block self-start px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs font-medium">
+            <span
+              className="inline-block self-start px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[11px] font-semibold uppercase tracking-wide"
+              style={{ fontFamily: "var(--font-jakarta)" }}
+            >
               {category.name}
             </span>
           )}
 
           {/* Name */}
-          <h1 className="text-2xl font-bold text-gray-900 leading-snug">{product.name}</h1>
+          <h1
+            className="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight tracking-[-0.02em]"
+            style={{ fontFamily: "var(--font-jakarta)" }}
+          >
+            {product.name}
+          </h1>
 
           {/* Code */}
           {product.code && (
-            <p className="text-sm text-gray-400">Cód: {product.code}</p>
+            <p className="font-mono text-xs text-gray-400 tracking-wide uppercase">
+              Cód: {product.code}
+            </p>
           )}
 
           {/* Price */}
-          <p className="text-3xl font-extrabold" style={{ color: "var(--brand)" }}>
+          <p
+            className="text-3xl md:text-4xl font-extrabold tracking-tight"
+            style={{ color: "var(--brand)", fontFamily: "var(--font-jakarta)" }}
+          >
             {formatPrice(product.sale_price)}
           </p>
 
@@ -151,18 +164,21 @@ export function ProductDetail({ product }: ProductDetailProps) {
           {!stockNull && (
             <div>
               {(product.stock as number) > 0 ? (
-                <span className="text-sm text-green-600 font-medium">
+                <span className="text-sm text-green-600 font-semibold tracking-tight">
                   Stock disponible: {product.stock}
                 </span>
               ) : (
-                <span className="text-sm text-red-500 font-medium">Sin stock</span>
+                <span className="text-sm text-red-500 font-semibold tracking-tight">Sin stock</span>
               )}
             </div>
           )}
 
           {/* Min order badge */}
           {minQty > 1 && (
-            <div className="inline-flex items-center gap-1 self-start px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-medium border border-blue-100">
+            <div
+              className="inline-flex items-center gap-1 self-start px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-semibold border border-blue-100 tracking-tight"
+              style={{ fontFamily: "var(--font-jakarta)" }}
+            >
               Pedido mínimo: {minQty} unidades
             </div>
           )}
@@ -202,8 +218,8 @@ export function ProductDetail({ product }: ProductDetailProps) {
           <button
             onClick={handleAddToCart}
             disabled={!stockNull && (product.stock as number) <= 0}
-            className="mt-1 w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ backgroundColor: added ? undefined : "var(--brand)" }}
+            className="mt-1 w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm tracking-tight transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ ...(!added ? { backgroundColor: "var(--brand)" } : {}), fontFamily: "var(--font-jakarta)" }}
             onMouseEnter={(e) => {
               if (!added)
                 (e.currentTarget as HTMLButtonElement).style.backgroundColor =
@@ -229,9 +245,14 @@ export function ProductDetail({ product }: ProductDetailProps) {
 
           {/* Description */}
           {product.description && (
-            <div className="mt-2 pt-3 border-t border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-700 mb-1">Descripción</h2>
-              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+            <div className="mt-3 pt-4 border-t border-gray-100">
+              <h2
+                className="text-sm font-bold text-gray-800 mb-2 uppercase tracking-wide"
+                style={{ fontFamily: "var(--font-jakarta)" }}
+              >
+                Descripción
+              </h2>
+              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap tracking-tight">
                 {product.description}
               </p>
             </div>
@@ -242,7 +263,10 @@ export function ProductDetail({ product }: ProductDetailProps) {
       {/* Related products */}
       {related.length > 0 && (
         <section className="mt-10">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">
+          <h2
+            className="text-lg font-bold text-gray-800 mb-4 tracking-tight"
+            style={{ fontFamily: "var(--font-jakarta)" }}
+          >
             Más de {category?.name ?? "esta categoría"}
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -279,13 +303,19 @@ function RelatedCard({ product }: { product: Product }) {
           )}
         </div>
       </Link>
-      <div className="p-2 flex flex-col gap-1 flex-1">
+      <div className="p-2.5 flex flex-col gap-1 flex-1">
         <Link href={`/p/${product.id}`}>
-          <p className="text-xs font-medium text-gray-800 line-clamp-2 leading-snug hover:text-[var(--brand)] transition-colors">
+          <p
+            className="text-xs font-semibold text-gray-800 line-clamp-2 leading-snug tracking-[-0.01em] hover:text-[var(--brand)] transition-colors"
+            style={{ fontFamily: "var(--font-jakarta)" }}
+          >
             {product.name}
           </p>
         </Link>
-        <p className="text-sm font-bold mt-auto" style={{ color: "var(--brand)" }}>
+        <p
+          className="text-sm font-extrabold mt-auto tracking-tight"
+          style={{ color: "var(--brand)", fontFamily: "var(--font-jakarta)" }}
+        >
           {formatPrice(product.sale_price)}
         </p>
         <Link
