@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { MenuIcon, XIcon } from "lucide-react";
+import { MenuIcon, XIcon, LogOutIcon } from "lucide-react";
+import { signOut } from "@/lib/auth-client";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
@@ -14,7 +15,13 @@ const navItems = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+
+  async function handleSignOut() {
+    await signOut();
+    router.push("/login");
+  }
 
   const isActive = (href: string) => {
     if (href === "/admin") return pathname === "/admin";
@@ -50,13 +57,20 @@ export function AdminSidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-6 py-4 border-t border-white/10">
+      <div className="px-4 py-4 border-t border-white/10 space-y-1">
         <Link
           href="/"
-          className="text-white/50 hover:text-white/80 text-xs transition-colors"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-white/50 hover:text-white/80 text-xs transition-colors hover:bg-white/5"
         >
           ← Volver a la tienda
         </Link>
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-white/50 hover:text-red-400 text-xs transition-colors hover:bg-white/5"
+        >
+          <LogOutIcon size={13} />
+          Cerrar sesión
+        </button>
       </div>
     </>
   );

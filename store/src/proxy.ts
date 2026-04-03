@@ -27,7 +27,7 @@ export async function proxy(request: NextRequest) {
   // Protect admin routes
   if (path.startsWith("/admin")) {
     if (!user) {
-      return NextResponse.redirect(new URL("/login?next=/admin", request.url));
+      return NextResponse.redirect(new URL(`/login?next=${path}`, request.url));
     }
     // Check admin role via service client
     const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map(e => e.trim());
