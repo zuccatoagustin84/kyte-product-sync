@@ -56,6 +56,13 @@ export default function ProductosAdmin() {
   const [form, setForm] = useState<EditForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  // New product sheet
+  const [creatingOpen, setCreatingOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<EditForm>(emptyForm());
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -115,6 +122,12 @@ export default function ProductosAdmin() {
     setSaveError("");
   }
 
+  function openCreate() {
+    setCreateForm(emptyForm());
+    setCreateError("");
+    setCreatingOpen(true);
+  }
+
   async function handleSave() {
     if (!editing) return;
     setSaving(true);
@@ -146,6 +159,56 @@ export default function ProductosAdmin() {
     }
   }
 
+  async function handleDelete() {
+    if (!editing) return;
+    if (!window.confirm("¿Eliminar este producto?")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/products/${editing.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setSaveError(body.error ?? "Error al eliminar");
+        return;
+      }
+      setEditing(null);
+      fetchProducts();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleCreate() {
+    setCreating(true);
+    setCreateError("");
+    try {
+      const res = await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: createForm.name,
+          code: createForm.code || null,
+          sale_price: parseFloat(createForm.sale_price) || 0,
+          cost_price: parseFloat(createForm.cost_price) || null,
+          stock: parseInt(createForm.stock) || null,
+          min_order: parseInt(createForm.min_order) || null,
+          active: createForm.active,
+          category_id: createForm.category_id || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        setCreateError(body.error ?? "Error al crear");
+        return;
+      }
+      setCreatingOpen(false);
+      fetchProducts();
+    } finally {
+      setCreating(false);
+    }
+  }
+
   async function toggleActive(product: Product) {
     await fetch(`/api/admin/products/${product.id}`, {
       method: "PUT",
@@ -170,11 +233,134 @@ export default function ProductosAdmin() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  // Reusable form fields component (rendered inline for both sheets)
+  function renderFormFields(
+    f: EditForm,
+    setF: (v: EditForm) => void,
+    error: string
+  ) {
+    return (
+      <div className="px-4 py-4 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Nombre
+          </label>
+          <Input
+            value={f.name}
+            onChange={(e) => setF({ ...f, name: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Código
+          </label>
+          <Input
+            value={f.code}
+            onChange={(e) => setF({ ...f, code: e.target.value })}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Precio venta
+            </label>
+            <Input
+              type="number"
+              value={f.sale_price}
+              onChange={(e) => setF({ ...f, sale_price: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Precio costo
+            </label>
+            <Input
+              type="number"
+              value={f.cost_price}
+              onChange={(e) => setF({ ...f, cost_price: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Stock
+            </label>
+            <Input
+              type="number"
+              value={f.stock}
+              onChange={(e) => setF({ ...f, stock: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Pedido mínimo
+            </label>
+            <Input
+              type="number"
+              value={f.min_order}
+              onChange={(e) => setF({ ...f, min_order: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Categoría
+          </label>
+          <select
+            value={f.category_id}
+            onChange={(e) => setF({ ...f, category_id: e.target.value })}
+            className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm focus-visible:border-ring outline-none"
+          >
+            <option value="">Sin categoría</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setF({ ...f, active: !f.active })}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+              f.active ? "bg-orange-500" : "bg-gray-200"
+            }`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                f.active ? "translate-x-4" : "translate-x-1"
+              }`}
+            />
+          </button>
+          <span className="text-sm font-medium text-gray-700">
+            {f.active ? "Activo" : "Inactivo"}
+          </span>
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 md:p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
-        <p className="text-gray-500 mt-1">{total} productos en total</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
+          <p className="text-gray-500 mt-1">{total} productos en total</p>
+        </div>
+        <Button
+          onClick={openCreate}
+          className="bg-orange-500 hover:bg-orange-600 text-white border-0"
+        >
+          Nuevo producto
+        </Button>
       </div>
 
       {/* Filters */}
@@ -386,126 +572,49 @@ export default function ProductosAdmin() {
             <SheetTitle>Editar producto</SheetTitle>
           </SheetHeader>
 
-          {editing && (
-            <div className="px-4 py-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre
-                </label>
-                <Input
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Código
-                </label>
-                <Input
-                  value={form.code}
-                  onChange={(e) => setForm({ ...form, code: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Precio venta
-                  </label>
-                  <Input
-                    type="number"
-                    value={form.sale_price}
-                    onChange={(e) => setForm({ ...form, sale_price: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Precio costo
-                  </label>
-                  <Input
-                    type="number"
-                    value={form.cost_price}
-                    onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stock
-                  </label>
-                  <Input
-                    type="number"
-                    value={form.stock}
-                    onChange={(e) => setForm({ ...form, stock: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pedido mínimo
-                  </label>
-                  <Input
-                    type="number"
-                    value={form.min_order}
-                    onChange={(e) => setForm({ ...form, min_order: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Categoría
-                </label>
-                <select
-                  value={form.category_id}
-                  onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm focus-visible:border-ring outline-none"
-                >
-                  <option value="">Sin categoría</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setForm({ ...form, active: !form.active })}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                    form.active ? "bg-orange-500" : "bg-gray-200"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                      form.active ? "translate-x-4" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-                <span className="text-sm font-medium text-gray-700">
-                  {form.active ? "Activo" : "Inactivo"}
-                </span>
-              </div>
-
-              {saveError && (
-                <p className="text-sm text-red-600">{saveError}</p>
-              )}
-            </div>
-          )}
+          {editing && renderFormFields(form, setForm, saveError)}
 
           <SheetFooter>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting || saving}
+            >
+              {deleting ? "Eliminando..." : "Eliminar"}
+            </Button>
             <Button variant="outline" onClick={() => setEditing(null)}>
               Cancelar
             </Button>
             <Button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || deleting}
               className="bg-orange-500 hover:bg-orange-600 text-white border-0"
             >
               {saving ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* New Product Sheet */}
+      <Sheet open={creatingOpen} onOpenChange={(open) => { if (!open) setCreatingOpen(false); }}>
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Nuevo producto</SheetTitle>
+          </SheetHeader>
+
+          {renderFormFields(createForm, setCreateForm, createError)}
+
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setCreatingOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={creating}
+              className="bg-orange-500 hover:bg-orange-600 text-white border-0"
+            >
+              {creating ? "Creando..." : "Crear producto"}
             </Button>
           </SheetFooter>
         </SheetContent>

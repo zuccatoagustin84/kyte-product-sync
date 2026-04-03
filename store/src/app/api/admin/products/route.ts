@@ -2,8 +2,6 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
-type OrderStatus = "pending" | "confirmed" | "cancelled";
-
 async function checkAdmin() {
   const supabase = await createSupabaseServer();
   const {
@@ -18,47 +16,58 @@ async function checkAdmin() {
   return user;
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: NextRequest) {
   const user = await checkAdmin();
   if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-
-  let body: { status?: OrderStatus };
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const validStatuses: OrderStatus[] = ["pending", "confirmed", "cancelled"];
-  if (!body.status || !validStatuses.includes(body.status)) {
+  if (!body.name || !body.sale_price) {
     return Response.json(
-      { error: "Estado inválido. Debe ser: pending, confirmed o cancelled" },
+      { error: "Los campos name y sale_price son requeridos" },
       { status: 400 }
     );
+  }
+
+  const id =
+    (body.id as string | undefined) ||
+    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const allowed = [
+    "name",
+    "code",
+    "sale_price",
+    "cost_price",
+    "stock",
+    "min_order",
+    "active",
+    "category_id",
+  ];
+  const insert: Record<string, unknown> = { id };
+  for (const key of allowed) {
+    if (key in body) {
+      insert[key] = body[key];
+    }
   }
 
   const supabase = createServiceClient();
 
   const { data, error } = await supabase
-    .from("orders")
-    .update({ status: body.status })
-    .eq("id", id)
-    .select()
+    .from("products")
+    .insert(insert)
+    .select("*, category:categories(id,name)")
     .single();
 
   if (error) {
-    if (error.code === "PGRST116") {
-      return Response.json({ error: "Pedido no encontrado" }, { status: 404 });
-    }
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  return Response.json({ order: data });
+  return Response.json({ product: data }, { status: 201 });
 }
