@@ -1,0 +1,22 @@
+name: Deploy Store
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "store/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Store to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: team_4QxOPiKZSoH4D5ue8s893H2w
+          vercel-project-id: prj_mJkVIuGHbW0ye7zKeyfSzk4rSi2o
+          working-directory: ./store
+          vercel-args: "--prod"
