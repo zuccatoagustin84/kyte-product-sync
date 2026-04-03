@@ -7,7 +7,6 @@ import { Minus, Plus, ShoppingCart } from "lucide-react";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
 import { useCartStore } from "@/lib/cart-store";
-import { supabase } from "@/lib/supabase";
 
 interface ProductDetailProps {
   product: Product;
@@ -38,17 +37,12 @@ export function ProductDetail({ product }: ProductDetailProps) {
 
   useEffect(() => {
     if (!product.category_id) return;
-    supabase
-      .from("products")
-      .select("*, category:categories(id,name)")
-      .eq("category_id", product.category_id)
-      .eq("active", true)
-      .neq("id", product.id)
-      .limit(4)
-      .then(({ data }) => {
-        if (data) setRelated(data as Product[]);
+    fetch(`/api/products/${product.id}/related`)
+      .then((r) => r.json())
+      .then(({ products }) => {
+        if (products) setRelated(products as Product[]);
       });
-  }, [product.category_id, product.id]);
+  }, [product.id, product.category_id]);
 
   const handleDecrement = () => {
     setQty((prev) => Math.max(minQty, prev - 1));

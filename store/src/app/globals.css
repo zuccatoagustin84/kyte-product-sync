@@ -135,9 +135,11 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
   }
   html {
     @apply font-sans;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
     scroll-behavior: smooth;
   }
 

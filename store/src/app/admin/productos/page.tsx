@@ -26,6 +26,7 @@ type EditForm = {
   min_order: string;
   active: boolean;
   category_id: string;
+  description: string;
 };
 
 function emptyForm(p?: Product): EditForm {
@@ -38,6 +39,7 @@ function emptyForm(p?: Product): EditForm {
     min_order: (p as any)?.min_order?.toString() ?? "",
     active: p?.active ?? true,
     category_id: p?.category_id ?? "",
+    description: p?.description ?? "",
   };
 }
 
@@ -145,6 +147,7 @@ export default function ProductosAdmin() {
           min_order: parseInt(form.min_order) || null,
           active: form.active,
           category_id: form.category_id || null,
+          description: form.description || null,
         }),
       });
       if (!res.ok) {
@@ -195,6 +198,7 @@ export default function ProductosAdmin() {
           min_order: parseInt(createForm.min_order) || null,
           active: createForm.active,
           category_id: createForm.category_id || null,
+          description: createForm.description || null,
         }),
       });
       if (!res.ok) {
@@ -323,6 +327,19 @@ export default function ProductosAdmin() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Descripción
+          </label>
+          <textarea
+            value={f.description}
+            onChange={(e) => setF({ ...f, description: e.target.value })}
+            rows={5}
+            placeholder="Características, dimensiones, materiales..."
+            className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm focus-visible:border-ring outline-none resize-y"
+          />
         </div>
 
         <div className="flex items-center gap-3">

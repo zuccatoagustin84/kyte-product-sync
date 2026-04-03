@@ -44,6 +44,7 @@ export async function PUT(
     "min_order",
     "active",
     "category_id",
+    "description",
   ];
   const update: Record<string, unknown> = {};
   for (const key of allowed) {

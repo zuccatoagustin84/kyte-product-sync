@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
     "min_order",
     "active",
     "category_id",
+    "description",
   ];
   const insert: Record<string, unknown> = { id };
   for (const key of allowed) {
