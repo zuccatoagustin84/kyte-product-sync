@@ -52,6 +52,8 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 
 ## Deployments
 - **Streamlit Cloud**: https://kyte-appu-5lomurjh9bjmhhkkptqrh4.streamlit.app
+- **Vercel — Price Sync** (`web/`): https://web-six-rouge-86.vercel.app
+- **Vercel — Tienda Mayorista** (`store/`): https://store-lyart-delta.vercel.app
 - **GitHub**: https://github.com/zuccatoagustin84/kyte-product-sync (public)
 
 ## Known issues / history
@@ -68,13 +70,20 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 - **Match by code only** - no name matching
 - Test account (Agustin Zuccato) uid/aid: `2Bj9r4qNoYRd5JdTXX0rHMI9hjg2` / `2Bj9r4qNoYRd5J`
 
-## Las 4 opciones de uso
+## Las 5 opciones de uso
 1. **CLI** — `python sync_prices_api.py --dry-run`
 2. **Streamlit local** — `streamlit run app.py`
 3. **Streamlit Cloud** — https://kyte-appu-5lomurjh9bjmhhkkptqrh4.streamlit.app
 4. **Desktop .exe** — `dist/KytePriceSync.exe` (doble clic, build con `build_desktop.bat`)
-5. **Vercel/Next.js** — pendiente
+5. **Vercel/Next.js** — https://web-six-rouge-86.vercel.app (`web/`)
+
+## Tienda Mayorista (proyecto aparte)
+- **Stack**: Next.js + Supabase + Vercel
+- **URL**: https://store-lyart-delta.vercel.app (`store/`)
+- **Supabase**: proyecto `knxqeebtynqchhwdmxae` (org: MP Tools, región: sa-east-1)
+- 1221 productos y 16 categorías migrados desde Kyte
+- Funcionalidades: catálogo, búsqueda, carrito, pedidos → Supabase + WhatsApp
 
 ## Next steps
 - Firmar el .exe con un certificado (opcional, evita warnings de Windows Defender)
-- Migrar Streamlit a Next.js + Vercel para mejor UX
+- Dominio custom para la tienda mayorista

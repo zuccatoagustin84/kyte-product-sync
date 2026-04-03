@@ -230,9 +230,20 @@ Columnas esperadas:
 
 ---
 
+## Deployments
+
+| App | URL |
+|-----|-----|
+| **Streamlit Cloud** (sync de precios) | https://kyte-appu-5lomurjh9bjmhhkkptqrh4.streamlit.app |
+| **Vercel — Price Sync** (Next.js) | https://web-six-rouge-86.vercel.app |
+| **Vercel — Tienda Mayorista** (Next.js + Supabase) | https://store-lyart-delta.vercel.app |
+| **GitHub** | https://github.com/zuccatoagustin84/kyte-product-sync |
+
+---
+
 ## Archivos del proyecto
 
-| Archivo                | Descripcion                                          |
+| Archivo / Carpeta      | Descripcion                                          |
 |------------------------|------------------------------------------------------|
 | `sync_prices_api.py`   | Script principal — sync via API directa              |
 | `kyte_api.py`          | Cliente Python para la API de Kyte Web               |
@@ -240,6 +251,8 @@ Columnas esperadas:
 | `sync_prices.py`       | (legacy) Sync via Excel export/import                |
 | `config.example.json`  | Ejemplo de configuracion con uid/aid                 |
 | `requirements.txt`     | Dependencias Python                                  |
+| `web/`                 | Next.js app — sincronizador de precios (Vercel)      |
+| `store/`               | Next.js app — tienda mayorista (Vercel + Supabase)   |
 
 ---
 
