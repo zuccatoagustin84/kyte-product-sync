@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      query = query.ilike("name", `%${search}%`);
+      query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%`);
     }
 
     query = query.order("sort_order").range(offset, offset + limit - 1);
