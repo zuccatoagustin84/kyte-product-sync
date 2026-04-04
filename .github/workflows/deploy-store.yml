@@ -12,14 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore Vercel auth
+        run: |
+          mkdir -p ~/.local/share/com.vercel.cli/Data
+          echo '${{ secrets.VERCEL_AUTH_JSON }}' > ~/.local/share/com.vercel.cli/Data/auth.json
+
       - name: Disable Vercel GitHub auto-deploy (monorepo)
         run: |
-          curl -s -X PATCH "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID" \
+          curl -s -X PATCH "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
             -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"commandForIgnoringBuildStep": "exit 0"}' > /dev/null
         env:
           VERCEL_PROJECT_ID: prj_mJkVIuGHbW0ye7zKeyfSzk4rSi2o
+          VERCEL_ORG_ID: team_4QxOPiKZSoH4D5ue8s893H2w
 
       - uses: actions/setup-node@v4
         with:
@@ -30,7 +36,7 @@ jobs:
 
       - name: Deploy Store to Vercel
         working-directory: ./store
-        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        run: vercel deploy --prod --yes
         env:
           VERCEL_ORG_ID: team_4QxOPiKZSoH4D5ue8s893H2w
           VERCEL_PROJECT_ID: prj_mJkVIuGHbW0ye7zKeyfSzk4rSi2o
