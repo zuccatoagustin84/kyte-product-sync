@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Minus, Plus, ShoppingCart } from "lucide-react";
-import type { Product } from "@/lib/types";
+import type { Product, ProductImage } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
 import { useCartStore } from "@/lib/cart-store";
 
@@ -32,8 +32,22 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const [qty, setQty] = useState(minQty);
   const [added, setAdded] = useState(false);
   const [related, setRelated] = useState<Product[]>([]);
+  const [images, setImages] = useState<ProductImage[]>([]);
+  const [selectedImage, setSelectedImage] = useState(0);
 
   const category = product.category as { id: string; name: string } | null | undefined;
+
+  // Fetch product images
+  useEffect(() => {
+    fetch(`/api/products/${product.id}/images`)
+      .then((r) => r.json())
+      .then(({ images: imgs }) => {
+        if (imgs && imgs.length > 0) {
+          setImages(imgs as ProductImage[]);
+          setSelectedImage(0);
+        }
+      });
+  }, [product.id]);
 
   useEffect(() => {
     if (!product.category_id) return;
@@ -77,12 +91,12 @@ export function ProductDetail({ product }: ProductDetailProps) {
     <main className="max-w-5xl mx-auto px-4 py-6">
       {/* Main product section */}
       <div className="flex flex-col md:flex-row gap-8">
-        {/* Image */}
+        {/* Image gallery */}
         <div className="w-full md:w-1/2">
           <div className="relative w-full aspect-square md:aspect-auto md:h-[420px] bg-gray-100 rounded-xl overflow-hidden">
-            {product.image_url ? (
+            {(images.length > 0 ? images[selectedImage]?.url : product.image_url) ? (
               <Image
-                src={product.image_url}
+                src={images.length > 0 ? images[selectedImage].url : product.image_url!}
                 alt={product.name}
                 fill
                 sizes="(max-width: 768px) 100vw, 50vw"
@@ -96,7 +110,51 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 </span>
               </div>
             )}
+
+            {/* Navigation arrows */}
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={() => setSelectedImage((prev) => (prev > 0 ? prev - 1 : images.length - 1))}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white shadow flex items-center justify-center text-gray-700 transition-colors"
+                  aria-label="Imagen anterior"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={() => setSelectedImage((prev) => (prev < images.length - 1 ? prev + 1 : 0))}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white shadow flex items-center justify-center text-gray-700 transition-colors"
+                  aria-label="Imagen siguiente"
+                >
+                  ›
+                </button>
+              </>
+            )}
           </div>
+
+          {/* Thumbnails */}
+          {images.length > 1 && (
+            <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
+              {images.map((img, idx) => (
+                <button
+                  key={img.id}
+                  onClick={() => setSelectedImage(idx)}
+                  className={`relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-colors ${
+                    idx === selectedImage ? "border-orange-400" : "border-transparent hover:border-gray-300"
+                  }`}
+                >
+                  <Image
+                    src={img.url}
+                    alt={`Imagen ${idx + 1}`}
+                    fill
+                    sizes="64px"
+                    className="object-cover"
+                    unoptimized
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Info */}

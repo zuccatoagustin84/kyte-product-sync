@@ -14,6 +14,7 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { ImageManager } from "@/components/admin/ImageManager";
 
 const PAGE_SIZE = 50;
 
@@ -590,6 +591,12 @@ export default function ProductosAdmin() {
           </SheetHeader>
 
           {editing && renderFormFields(form, setForm, saveError)}
+
+          {editing && (
+            <div className="px-4 pb-4">
+              <ImageManager productId={editing.id} />
+            </div>
+          )}
 
           <SheetFooter>
             <Button
