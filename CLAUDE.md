@@ -42,6 +42,7 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 | `sync_prices.py` | Legacy Excel-based sync (not used) |
 | `extract_token.py` | Playwright token extractor |
 | `get_token.js` | Browser console token extractor |
+| `sync_descriptions.py` | Sync product descriptions to Supabase |
 | `build_desktop.bat` | Build script → `dist/KytePriceSync.exe` |
 
 ## Matching logic
@@ -84,6 +85,19 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 - 1221 productos y 16 categorías migrados desde Kyte
 - Funcionalidades: catálogo, búsqueda, carrito, pedidos → Supabase + WhatsApp
 
+### Múltiples imágenes por producto
+- **Tabla**: `product_images` (id, product_id, url, sort_order, is_primary, created_at)
+- **Storage**: Supabase Storage bucket `product-images` (público)
+- **Migración**: `store/supabase-migration-product-images.sql` (migra `image_url` existentes)
+- **Admin UI**: `ImageManager` component en el sheet de editar producto — drag & drop, reordenar, marcar principal, eliminar
+- **Detalle público**: galería con thumbnails y flechas de navegación
+- **Backwards compat**: `products.image_url` se mantiene sincronizado con la imagen principal
+- **API routes**:
+  - `GET/POST/PUT/DELETE /api/admin/products/[id]/images` — gestión admin (requiere auth)
+  - `GET /api/products/[id]/images` — lectura pública
+- **Límites**: máx 5MB por imagen, formatos JPG/PNG/WebP/GIF
+
 ## Next steps
 - Firmar el .exe con un certificado (opcional, evita warnings de Windows Defender)
 - Dominio custom para la tienda mayorista
+- Ejecutar migración SQL `store/supabase-migration-product-images.sql` en Supabase
