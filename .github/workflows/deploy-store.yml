@@ -24,11 +24,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Restore Vercel auth
-        run: |
-          mkdir -p ~/.local/share/com.vercel.cli/Data
-          echo '${{ secrets.VERCEL_AUTH_JSON }}' > ~/.local/share/com.vercel.cli/Data/auth.json
-
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
@@ -41,12 +36,12 @@ jobs:
 
       - name: Deploy to Production
         if: github.ref == 'refs/heads/main'
-        run: vercel deploy --prod --yes --cwd store
+        run: vercel deploy --prod --yes --cwd store --token ${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Preview (staging Supabase)
         if: github.ref != 'refs/heads/main'
         run: |
-          PREVIEW_URL=$(vercel deploy --yes --cwd store)
+          PREVIEW_URL=$(vercel deploy --yes --cwd store --token ${{ secrets.VERCEL_TOKEN }})
           echo "### Preview Deploy" >> $GITHUB_STEP_SUMMARY
           echo "Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "URL: $PREVIEW_URL" >> $GITHUB_STEP_SUMMARY
