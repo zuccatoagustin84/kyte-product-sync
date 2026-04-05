@@ -2,41 +2,52 @@ name: Deploy Store
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - staging
+      - 'feature/**'
     paths:
-      - "store/**"
+      - 'store/**'
+      - '.github/workflows/deploy-store.yml'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: prj_mJkVIuGHbW0ye7zKeyfSzk4rSi2o
+
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Restore Vercel auth
         run: |
           mkdir -p ~/.local/share/com.vercel.cli/Data
           echo '${{ secrets.VERCEL_AUTH_JSON }}' > ~/.local/share/com.vercel.cli/Data/auth.json
 
-      - name: Disable Vercel GitHub auto-deploy (monorepo)
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Disable Vercel auto-deploy (monorepo fix)
         run: |
           curl -s -X PATCH "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" \
             -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"commandForIgnoringBuildStep": "exit 0"}' > /dev/null
-        env:
-          VERCEL_PROJECT_ID: prj_mJkVIuGHbW0ye7zKeyfSzk4rSi2o
-          VERCEL_ORG_ID: team_4QxOPiKZSoH4D5ue8s893H2w
+            -d '{"commandForIgnoringBuildStep":"exit 0"}' > /dev/null
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Deploy to Production
+        if: github.ref == 'refs/heads/main'
+        run: vercel deploy --prod --yes --cwd store
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
-
-      - name: Deploy Store to Vercel
-        working-directory: ./store
-        run: vercel deploy --prod --yes
-        env:
-          VERCEL_ORG_ID: team_4QxOPiKZSoH4D5ue8s893H2w
-          VERCEL_PROJECT_ID: prj_mJkVIuGHbW0ye7zKeyfSzk4rSi2o
+      - name: Deploy Preview (staging Supabase)
+        if: github.ref != 'refs/heads/main'
+        run: |
+          PREVIEW_URL=$(vercel deploy --yes --cwd store)
+          echo "### Preview Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "URL: $PREVIEW_URL" >> $GITHUB_STEP_SUMMARY
+          echo "Supabase: staging (tlecvwxzkszgjpucpdij)" >> $GITHUB_STEP_SUMMARY
