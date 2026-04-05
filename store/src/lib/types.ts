@@ -4,6 +4,15 @@ export interface Category {
   sort_order: number;
 }
 
+export interface ProductImage {
+  id: string;
+  product_id: string;
+  url: string;
+  sort_order: number;
+  is_primary: boolean;
+  created_at: string;
+}
+
 export interface Product {
   id: string;
   kyte_id: string | null;
@@ -20,6 +29,7 @@ export interface Product {
   min_order: number | null;
   slug: string | null;
   category?: Category;
+  images?: ProductImage[];
 }
 
 export interface CartItem {
