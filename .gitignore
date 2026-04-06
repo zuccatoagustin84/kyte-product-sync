@@ -30,5 +30,8 @@ kyte_updated.xlsx
 
 .vercel
 
+# Supabase CLI temp files
+supabase/.temp/
+
 # KytePriceSync build artifacts
 KytePriceSync.spec
