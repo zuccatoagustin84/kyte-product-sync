@@ -6,6 +6,7 @@ on:
       - main
       - staging
       - 'feature/**'
+      - 'claude/**'
     paths:
       - 'store/**'
       - '.github/workflows/deploy-store.yml'
