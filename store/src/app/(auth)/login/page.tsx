@@ -4,7 +4,6 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "@/lib/auth-client";
-import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 
 function GoogleIcon() {
@@ -29,20 +28,12 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleGoogle() {
+  function handleGoogle() {
     setGoogleLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(searchParams.get("next") ?? "/")}`,
-      },
-    });
-    if (error) {
-      setError("Google no está disponible por el momento. Usá email y contraseña.");
-      setGoogleLoading(false);
-    }
-    // On success, signInWithOAuth redirects the page automatically
+    // Navigate to our server-side Google OAuth route
+    const params = new URLSearchParams({ next });
+    window.location.href = `/api/auth/google?${params}`;
   }
 
   async function handleSubmit(e: React.FormEvent) {

@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Turnstile } from "@marsidev/react-turnstile";
 import { signUp } from "@/lib/auth-client";
-import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 
 function GoogleIcon() {
@@ -52,17 +51,10 @@ export default function RegistroPage() {
 
   const strength = getPasswordStrength(password);
 
-  async function handleGoogle() {
+  function handleGoogle() {
     setGoogleLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (error) {
-      setError("Google no está disponible por el momento. Usá email y contraseña.");
-      setGoogleLoading(false);
-    }
+    window.location.href = "/api/auth/google";
   }
 
   async function handleSubmit(e: React.FormEvent) {
