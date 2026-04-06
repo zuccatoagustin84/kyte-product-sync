@@ -21,6 +21,7 @@ function GoogleIcon() {
 function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/";
+  const setupDone = searchParams.get("setup") === "1";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,6 +68,11 @@ function LoginForm() {
 
   return (
     <>
+      {setupDone && (
+        <p className="mb-5 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+          Admin creado correctamente. Podés iniciar sesion.
+        </p>
+      )}
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Iniciar sesión</h1>
       <p className="text-sm text-gray-500 mb-6">Accedé a tu cuenta mayorista</p>
 

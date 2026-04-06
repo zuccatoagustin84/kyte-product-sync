@@ -1,31 +1,15 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { requireRole } from "@/lib/rbac";
 
 type OrderStatus = "pending" | "confirmed" | "cancelled";
-
-async function checkAdmin() {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const adminEmails = (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim());
-  if (!user || !adminEmails.includes(user.email ?? "")) {
-    return null;
-  }
-  return user;
-}
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await checkAdmin();
-  if (!user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireRole(request, ["admin", "operador"]);
+  if (auth instanceof Response) return auth;
 
   const { id } = await params;
 

@@ -2,21 +2,54 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MenuIcon, XIcon, LogOutIcon } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
+import type { Role } from "@/lib/rbac";
+import { hasPermission } from "@/lib/rbac";
 
-const navItems = [
-  { href: "/admin", label: "Dashboard", icon: "📊" },
-  { href: "/admin/productos", label: "Productos", icon: "📦" },
-  { href: "/admin/pedidos", label: "Pedidos", icon: "🛒" },
-  { href: "/admin/categorias", label: "Categorías", icon: "🏷️" },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: string;
+  permission: string;
+};
+
+const allNavItems: NavItem[] = [
+  { href: "/admin", label: "Dashboard", icon: "📊", permission: "products" },
+  { href: "/admin/productos", label: "Productos", icon: "📦", permission: "products" },
+  { href: "/admin/pedidos", label: "Pedidos", icon: "🛒", permission: "orders" },
+  { href: "/admin/categorias", label: "Categorías", icon: "🏷️", permission: "categories" },
+  { href: "/admin/usuarios", label: "Usuarios", icon: "👥", permission: "users" },
+  { href: "/admin/sync", label: "Sync Kyte", icon: "🔄", permission: "sync" },
 ];
+
+const ROLE_LABELS: Record<Role, string> = {
+  admin: "Admin",
+  operador: "Operador",
+  user: "Usuario",
+};
+
+const ROLE_COLORS: Record<Role, string> = {
+  admin: "bg-orange-500 text-white",
+  operador: "bg-blue-500 text-white",
+  user: "bg-gray-500 text-white",
+};
 
 export function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [role, setRole] = useState<Role | null>(null);
+
+  useEffect(() => {
+    fetch("/api/user/role")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.role) setRole(data.role as Role);
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleSignOut() {
     await signOut();
@@ -28,6 +61,10 @@ export function AdminSidebar() {
     return pathname.startsWith(href);
   };
 
+  const visibleItems = role
+    ? allNavItems.filter((item) => hasPermission(role, item.permission))
+    : [];
+
   const sidebarContent = (
     <>
       {/* Logo */}
@@ -35,11 +72,18 @@ export function AdminSidebar() {
         <span className="text-white font-bold text-lg tracking-tight">
           MP TOOLS Admin
         </span>
+        {role && (
+          <span
+            className={`mt-1.5 ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ROLE_COLORS[role]}`}
+          >
+            {ROLE_LABELS[role]}
+          </span>
+        )}
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => (
+        {visibleItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}

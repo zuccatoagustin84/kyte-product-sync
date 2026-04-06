@@ -43,8 +43,7 @@ function UserMenu() {
     .join("");
 
   const isAdmin =
-    profile?.role === "admin" ||
-    user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    profile?.role === "admin" || profile?.role === "operador";
 
   async function handleSignOut() {
     setOpen(false);

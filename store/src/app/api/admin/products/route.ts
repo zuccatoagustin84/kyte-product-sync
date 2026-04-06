@@ -1,26 +1,10 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { createSupabaseServer } from "@/lib/supabase-server";
-
-async function checkAdmin() {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const adminEmails = (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim());
-  if (!user || !adminEmails.includes(user.email ?? "")) {
-    return null;
-  }
-  return user;
-}
+import { requireRole } from "@/lib/rbac";
 
 export async function POST(request: NextRequest) {
-  const user = await checkAdmin();
-  if (!user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireRole(request, ["admin", "operador"]);
+  if (auth instanceof Response) return auth;
 
   let body: Record<string, unknown>;
   try {

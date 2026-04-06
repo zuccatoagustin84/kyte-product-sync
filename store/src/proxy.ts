@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import type { Role } from "@/lib/rbac";
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -29,10 +31,37 @@ export async function proxy(request: NextRequest) {
     if (!user) {
       return NextResponse.redirect(new URL(`/login?next=${path}`, request.url));
     }
-    // Check admin role via service client
-    const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map(e => e.trim());
-    if (!adminEmails.includes(user.email ?? "")) {
-      return NextResponse.redirect(new URL("/", request.url));
+
+    // Use service role client to read the user's role from profiles (bypasses RLS)
+    const service = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_KEY!
+    );
+    const { data: profile } = await service
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    const role = profile?.role as Role | undefined;
+
+    // /admin/usuarios/* — solo admin
+    if (path.startsWith("/admin/usuarios")) {
+      if (role !== "admin") {
+        return NextResponse.redirect(new URL("/", request.url));
+      }
+    }
+    // /admin/sync/* — solo admin
+    else if (path.startsWith("/admin/sync")) {
+      if (role !== "admin") {
+        return NextResponse.redirect(new URL("/", request.url));
+      }
+    }
+    // /admin/* (resto) — admin o operador
+    else {
+      if (role !== "admin" && role !== "operador") {
+        return NextResponse.redirect(new URL("/", request.url));
+      }
     }
   }
 
