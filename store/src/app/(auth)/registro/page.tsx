@@ -57,7 +57,7 @@ export default function RegistroPage() {
     setError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin + "/" },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) {
       setError("Google no está disponible por el momento. Usá email y contraseña.");
