@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tienda Mayorista MP Tools
 
-## Getting Started
+Catálogo mayorista online para **MP.TOOLS MAYORISTA**.
+Stack: Next.js 16 + Supabase + Vercel.
 
-First, run the development server:
+## URLs
+
+| Entorno | URL | Supabase |
+|---------|-----|----------|
+| **Producción** | https://store-lyart-delta.vercel.app | `knxqeebtynqchhwdmxae` |
+| **Staging** | Preview automático por branch (ver CI) | `tlecvwxzkszgjpucpdij` |
+
+## Admin
+
+| Entorno | Email | Password |
+|---------|-------|----------|
+| Producción | mptools.mayorista@gmail.com | Google OAuth |
+| Staging | admin@staging.mptools | Admin1234! |
+
+Acceso al panel: `/admin`
+
+## Desarrollo local
 
 ```bash
+cd store
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Variables de entorno (`.env.local`)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://...supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_KEY=...
+ADMIN_EMAILS=tu@email.com
+```
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
+Automático vía GitHub Actions (`.github/workflows/deploy-store.yml`):
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Push a `main` → producción
+- Push a `staging` o `feature/**` → preview con Supabase staging
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Manual:
+```bash
+vercel deploy --cwd store            # preview (staging Supabase)
+vercel deploy --prod --cwd store     # producción
+```
 
-## Deploy on Vercel
+## Migraciones Supabase
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Archivos `.sql` en la raíz de `store/` para ejecutar en el SQL Editor de Supabase.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Archivo | Descripción |
+|---------|-------------|
+| `supabase-migration-product-images.sql` | Tabla `product_images` — múltiples imágenes por producto |
+
+## Funcionalidades
+
+- Catálogo con búsqueda y filtro por categoría
+- Detalle de producto con galería (múltiples fotos, thumbnails, flechas)
+- Carrito → pedido por WhatsApp
+- Panel admin `/admin`: productos, categorías, pedidos, imágenes (drag & drop)
+- Auth con Supabase (Google OAuth en prod, email/password en staging)
