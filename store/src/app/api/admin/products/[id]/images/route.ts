@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { requireRole } from "@/lib/rbac";
+import { requireRole } from "@/lib/rbac-server";
 
 // GET /api/admin/products/[id]/images — list images for a product
 export async function GET(

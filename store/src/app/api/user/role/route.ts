@@ -1,4 +1,4 @@
-import { getUserRole } from "@/lib/rbac";
+import { getUserRole } from "@/lib/rbac-server";
 
 export async function GET() {
   const result = await getUserRole();

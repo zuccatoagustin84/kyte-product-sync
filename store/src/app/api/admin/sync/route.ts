@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { requireRole } from "@/lib/rbac";
+import { requireRole } from "@/lib/rbac-server";
 import * as XLSX from "xlsx";
 
 const KYTE_API_BASE = "https://kyte-api-gateway.azure-api.net/api/kyte-web";

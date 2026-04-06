@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { requireRole } from "@/lib/rbac";
+import { requireRole } from "@/lib/rbac-server";
 
 type Role = "admin" | "operador" | "user";
 const VALID_ROLES: Role[] = ["admin", "operador", "user"];
