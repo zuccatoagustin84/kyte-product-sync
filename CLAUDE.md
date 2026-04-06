@@ -97,7 +97,23 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
   - `GET /api/products/[id]/images` — lectura pública
 - **Límites**: máx 5MB por imagen, formatos JPG/PNG/WebP/GIF
 
+## Proceso de trabajo — Tienda Mayorista
+
+**SIEMPRE seguir este flujo para cambios en `store/`:**
+
+1. Crear rama: `git checkout -b feature/nombre-feature`
+2. Desarrollar y commitear en la rama
+3. Push: `git push origin feature/nombre-feature`
+   → CI deployea automáticamente a **staging** (Supabase staging)
+4. Validar en la URL preview de staging
+5. Crear PR: `feature/nombre-feature` → `main`
+6. Revisar y mergear el PR
+   → CI deployea automáticamente a **producción**
+
+**NUNCA pushear directo a `main` con cambios de store sin validar en staging primero.**
+
 ## Next steps
 - Firmar el .exe con un certificado (opcional, evita warnings de Windows Defender)
 - Dominio custom para la tienda mayorista
 - Ejecutar migración SQL `store/supabase-migration-product-images.sql` en Supabase
+- Crear usuario admin en staging via `/setup` para validar el RBAC
