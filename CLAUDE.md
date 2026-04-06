@@ -42,6 +42,7 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 | `sync_prices.py` | Legacy Excel-based sync (not used) |
 | `extract_token.py` | Playwright token extractor |
 | `get_token.js` | Browser console token extractor |
+| `sync_descriptions.py` | Sync product descriptions to Supabase |
 | `build_desktop.bat` | Build script → `dist/KytePriceSync.exe` |
 
 ## Matching logic
@@ -52,6 +53,8 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 
 ## Deployments
 - **Streamlit Cloud**: https://kyte-appu-5lomurjh9bjmhhkkptqrh4.streamlit.app
+- **Vercel — Price Sync** (`web/`): https://web-six-rouge-86.vercel.app
+- **Vercel — Tienda Mayorista** (`store/`): https://store-lyart-delta.vercel.app
 - **GitHub**: https://github.com/zuccatoagustin84/kyte-product-sync (public)
 
 ## Known issues / history
@@ -68,13 +71,49 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 - **Match by code only** - no name matching
 - Test account (Agustin Zuccato) uid/aid: `2Bj9r4qNoYRd5JdTXX0rHMI9hjg2` / `2Bj9r4qNoYRd5J`
 
-## Las 4 opciones de uso
+## Las 5 opciones de uso
 1. **CLI** — `python sync_prices_api.py --dry-run`
 2. **Streamlit local** — `streamlit run app.py`
 3. **Streamlit Cloud** — https://kyte-appu-5lomurjh9bjmhhkkptqrh4.streamlit.app
 4. **Desktop .exe** — `dist/KytePriceSync.exe` (doble clic, build con `build_desktop.bat`)
-5. **Vercel/Next.js** — pendiente
+5. **Vercel/Next.js** — https://web-six-rouge-86.vercel.app (`web/`)
+
+## Tienda Mayorista (proyecto aparte)
+- **Stack**: Next.js + Supabase + Vercel
+- **URL**: https://store-lyart-delta.vercel.app (`store/`)
+- **Supabase**: proyecto `knxqeebtynqchhwdmxae` (org: MP Tools, región: sa-east-1)
+- 1221 productos y 16 categorías migrados desde Kyte
+- Funcionalidades: catálogo, búsqueda, carrito, pedidos → Supabase + WhatsApp
+
+### Múltiples imágenes por producto
+- **Tabla**: `product_images` (id, product_id, url, sort_order, is_primary, created_at)
+- **Storage**: Supabase Storage bucket `product-images` (público)
+- **Migración**: `store/supabase-migration-product-images.sql` (migra `image_url` existentes)
+- **Admin UI**: `ImageManager` component en el sheet de editar producto — drag & drop, reordenar, marcar principal, eliminar
+- **Detalle público**: galería con thumbnails y flechas de navegación
+- **Backwards compat**: `products.image_url` se mantiene sincronizado con la imagen principal
+- **API routes**:
+  - `GET/POST/PUT/DELETE /api/admin/products/[id]/images` — gestión admin (requiere auth)
+  - `GET /api/products/[id]/images` — lectura pública
+- **Límites**: máx 5MB por imagen, formatos JPG/PNG/WebP/GIF
+
+## Proceso de trabajo — Tienda Mayorista
+
+**SIEMPRE seguir este flujo para cambios en `store/`:**
+
+1. Crear rama: `git checkout -b feature/nombre-feature`
+2. Desarrollar y commitear en la rama
+3. Push: `git push origin feature/nombre-feature`
+   → CI deployea automáticamente a **staging** (Supabase staging)
+4. Validar en la URL preview de staging
+5. Crear PR: `feature/nombre-feature` → `main`
+6. Revisar y mergear el PR
+   → CI deployea automáticamente a **producción**
+
+**NUNCA pushear directo a `main` con cambios de store sin validar en staging primero.**
 
 ## Next steps
 - Firmar el .exe con un certificado (opcional, evita warnings de Windows Defender)
-- Migrar Streamlit a Next.js + Vercel para mejor UX
+- Dominio custom para la tienda mayorista
+- Ejecutar migración SQL `store/supabase-migration-product-images.sql` en Supabase
+- Crear usuario admin en staging via `/setup` para validar el RBAC
