@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
+import { createSupabaseServer } from "@/lib/supabase-server";
 import type { OrderPayload } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
@@ -26,6 +27,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Try to get the authenticated user (optional — guest checkout allowed)
+  let userId: string | null = null;
+  try {
+    const serverSupabase = await createSupabaseServer();
+    const { data: { user } } = await serverSupabase.auth.getUser();
+    userId = user?.id ?? null;
+  } catch {
+    // Not authenticated — proceed as guest
+  }
+
   const supabase = createServiceClient();
 
   // Insert order
@@ -39,6 +50,7 @@ export async function POST(request: NextRequest) {
       notes: body.notes?.trim() || null,
       total: body.total,
       status: "pending",
+      ...(userId ? { user_id: userId } : {}),
     })
     .select("id")
     .single();

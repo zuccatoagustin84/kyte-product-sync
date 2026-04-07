@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useCartStore } from "@/lib/cart-store";
 import { formatPrice } from "@/lib/format";
 import { useAuth } from "@/components/auth/AuthProvider";
+import Link from "next/link";
 
 interface OrderFormProps {
   onBack: () => void;
@@ -195,6 +196,17 @@ export function OrderForm({ onBack }: OrderFormProps) {
           <WhatsAppIcon />
           Confirmar por WhatsApp
         </a>
+
+        <Link
+          href={`/pedido/${result.orderId}`}
+          onClick={closeCart}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          Ver seguimiento del pedido
+        </Link>
 
         <button
           onClick={closeCart}
