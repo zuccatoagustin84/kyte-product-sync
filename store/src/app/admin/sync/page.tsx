@@ -13,16 +13,17 @@ type Summary = {
   zeroPrice: number;
 };
 
-type ApplyResult = {
+type ActionResult = {
   success: number;
   failed: number;
-  errors: Array<{ code: string; name: string; error: string }>;
+  errors: Array<{ code: string; error: string }>;
 };
 
 type SyncResponse = {
   preview: SyncPreviewItem[];
   summary: Summary;
-  applied?: ApplyResult;
+  applied?: ActionResult;
+  created?: ActionResult;
   error?: string;
 };
 
@@ -31,10 +32,12 @@ export default function SyncPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<SyncPreviewItem[] | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [applyResult, setApplyResult] = useState<ActionResult | null>(null);
+  const [createResult, setCreateResult] = useState<ActionResult | null>(null);
   const [filterMode, setFilterMode] = useState<"all" | "update" | "skip">("all");
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -43,47 +46,35 @@ export default function SyncPage() {
     setPreview(null);
     setSummary(null);
     setApplyResult(null);
+    setCreateResult(null);
     setError("");
   }
 
-  async function callSync(apply: boolean) {
-    if (!file) {
-      setError("Seleccioná un archivo Excel primero.");
-      return;
-    }
-
+  async function callSync(action: "preview" | "apply" | "create") {
+    if (!file) { setError("Seleccioná un archivo Excel primero."); return; }
     setError("");
 
-    if (apply) {
-      setApplying(true);
-    } else {
-      setLoading(true);
-      setPreview(null);
-      setSummary(null);
-      setApplyResult(null);
-    }
+    if (action === "apply") setApplying(true);
+    else if (action === "create") setCreating(true);
+    else { setLoading(true); setPreview(null); setSummary(null); setApplyResult(null); setCreateResult(null); }
 
     try {
       const form = new FormData();
       form.append("file", file);
-
-      const url = apply ? "/api/admin/sync?apply=true" : "/api/admin/sync";
+      const url = action === "apply" ? "/api/admin/sync?apply=true"
+                : action === "create" ? "/api/admin/sync?create=true"
+                : "/api/admin/sync";
       const res = await fetch(url, { method: "POST", body: form });
       const data: SyncResponse = await res.json();
-
-      if (!res.ok || data.error) {
-        setError(data.error ?? `Error ${res.status}`);
-        return;
-      }
-
+      if (!res.ok || data.error) { setError(data.error ?? `Error ${res.status}`); return; }
       setPreview(data.preview);
       setSummary(data.summary);
       if (data.applied) setApplyResult(data.applied);
+      if (data.created) setCreateResult(data.created);
     } catch (e) {
       setError(`Error de red: ${(e as Error).message}`);
     } finally {
-      setLoading(false);
-      setApplying(false);
+      setLoading(false); setApplying(false); setCreating(false);
     }
   }
 
@@ -141,32 +132,35 @@ export default function SyncPage() {
         {/* Actions */}
         <div className="flex gap-3 pt-1">
           <Button
-            onClick={() => callSync(false)}
-            disabled={!file || loading || applying}
+            onClick={() => callSync("preview")}
+            disabled={!file || loading || applying || creating}
             className="bg-[#1a1a2e] hover:bg-[#16213e] text-white border-0"
           >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <Spinner /> Procesando...
-              </span>
-            ) : (
-              "Vista previa"
-            )}
+            {loading ? <span className="flex items-center gap-2"><Spinner /> Procesando...</span> : "Vista previa"}
           </Button>
 
           {preview && summary && summary.toUpdate > 0 && !applyResult && (
             <Button
-              onClick={() => callSync(true)}
-              disabled={applying || loading}
+              onClick={() => callSync("apply")}
+              disabled={applying || loading || creating}
               className="bg-orange-500 hover:bg-orange-600 text-white border-0"
             >
-              {applying ? (
-                <span className="flex items-center gap-2">
-                  <Spinner /> Aplicando {summary.toUpdate} cambios...
-                </span>
-              ) : (
-                `Aplicar ${summary.toUpdate} cambios`
-              )}
+              {applying
+                ? <span className="flex items-center gap-2"><Spinner /> Aplicando {summary.toUpdate} cambios...</span>
+                : `Actualizar ${summary.toUpdate} precios`}
+            </Button>
+          )}
+
+          {preview && summary && summary.notFound > 0 && !createResult && (
+            <Button
+              onClick={() => callSync("create")}
+              disabled={creating || loading || applying}
+              variant="outline"
+              className="border-blue-300 text-blue-700 hover:bg-blue-50"
+            >
+              {creating
+                ? <span className="flex items-center gap-2"><Spinner /> Creando productos...</span>
+                : `Crear ${summary.notFound} productos nuevos`}
             </Button>
           )}
         </div>
@@ -178,6 +172,25 @@ export default function SyncPage() {
           </div>
         )}
       </div>
+
+      {/* Create result banner */}
+      {createResult && (
+        <div className={`rounded-xl p-4 mb-4 border ${createResult.failed === 0 ? "bg-blue-50 border-blue-200" : "bg-yellow-50 border-yellow-200"}`}>
+          <p className="font-semibold text-gray-900 mb-1">
+            {createResult.failed === 0 ? "Productos creados correctamente" : "Creación con errores"}
+          </p>
+          <p className="text-sm text-gray-600">
+            {createResult.success} productos creados{createResult.failed > 0 && `, ${createResult.failed} con error`}.
+          </p>
+          {createResult.errors.length > 0 && (
+            <ul className="mt-2 text-xs text-red-700 space-y-1">
+              {createResult.errors.map((e, i) => (
+                <li key={i}><span className="font-mono">{e.code}</span> — {e.error}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Apply result banner */}
       {applyResult && (

@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
   if (auth instanceof Response) return auth;
 
   const apply = request.nextUrl.searchParams.get("apply") === "true";
+  const create = request.nextUrl.searchParams.get("create") === "true";
 
   let formData: FormData;
   try {
@@ -189,30 +190,57 @@ export async function POST(request: NextRequest) {
     zeroPrice: preview.filter((r) => r.reason === "Precio cero (ignorado)").length,
   };
 
-  if (!apply) {
+  if (!apply && !create) {
     return Response.json({ preview, summary });
   }
 
-  // Aplicar cambios en Supabase
-  const errors: Array<{ code: string; error: string }> = [];
-  let successCount = 0;
+  // Aplicar actualizaciones de precio
+  const updateErrors: Array<{ code: string; error: string }> = [];
+  let updateSuccess = 0;
 
-  for (const { id, newPrice, code } of updatesToApply) {
-    const { error } = await supabase
-      .from("products")
-      .update({ sale_price: newPrice, cost_price: newPrice, updated_at: new Date().toISOString() })
-      .eq("id", id);
+  if (apply) {
+    for (const { id, newPrice, code } of updatesToApply) {
+      const { error } = await supabase
+        .from("products")
+        .update({ sale_price: newPrice, cost_price: newPrice, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) updateErrors.push({ code, error: error.message });
+      else updateSuccess++;
+    }
+  }
 
-    if (error) {
-      errors.push({ code, error: error.message });
-    } else {
-      successCount++;
+  // Crear productos nuevos
+  const createErrors: Array<{ code: string; error: string }> = [];
+  let createSuccess = 0;
+
+  if (create) {
+    const toCreate = preview.filter((r) => r.reason === "No encontrado en la tienda" && r.newPrice > 0);
+    for (const item of toCreate) {
+      const slug = item.name
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      const id = `${Date.now()}-new`;
+      const { error } = await supabase.from("products").insert({
+        id: `${id}-${Math.random().toString(36).slice(2, 6)}`,
+        name: item.name,
+        code: item.code,
+        sale_price: item.newPrice,
+        cost_price: item.newPrice,
+        active: true,
+        slug: `${slug}-${Math.random().toString(36).slice(2, 6)}`,
+        sort_order: 9999,
+      });
+      if (error) createErrors.push({ code: item.code, error: error.message });
+      else createSuccess++;
     }
   }
 
   return Response.json({
     preview,
     summary,
-    applied: { success: successCount, failed: errors.length, errors },
+    ...(apply && { applied: { success: updateSuccess, failed: updateErrors.length, errors: updateErrors } }),
+    ...(create && { created: { success: createSuccess, failed: createErrors.length, errors: createErrors } }),
   });
 }
