@@ -17,26 +17,28 @@ function parseExcel(buffer: ArrayBuffer): SourceRow[] {
   const raw: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
 
   let headerRow = -1;
+  let codigoCol = -1;
   let articuloCol = -1;
   let precioCol = -1;
 
   for (let i = 0; i < Math.min(30, raw.length); i++) {
     const row = raw[i];
-    let foundArticulo = -1;
-    let foundPrecio = -1;
+    let fCodigo = -1, fArticulo = -1, fPrecio = -1;
 
     for (let j = 0; j < row.length; j++) {
       const val = row[j];
       if (val == null) continue;
       const lower = String(val).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (lower.includes("articulo")) foundArticulo = j;
-      if (lower.includes("precio")) foundPrecio = j;
+      if (lower.includes("codigo") || lower.includes("digo")) fCodigo = j;
+      else if (lower.includes("articulo")) fArticulo = j;
+      if (lower.includes("precio")) fPrecio = j;
     }
 
-    if (foundArticulo !== -1 && foundPrecio !== -1) {
+    if (fArticulo !== -1 && fPrecio !== -1) {
       headerRow = i;
-      articuloCol = foundArticulo;
-      precioCol = foundPrecio;
+      codigoCol = fCodigo;
+      articuloCol = fArticulo;
+      precioCol = fPrecio;
       break;
     }
   }
@@ -55,8 +57,15 @@ function parseExcel(buffer: ArrayBuffer): SourceRow[] {
 
     if (!name || isNaN(priceRaw)) continue;
 
-    // El código es el mismo valor de la columna Articulo (como en Kyte)
-    results.push({ code: name.toLowerCase(), name, price: priceRaw });
+    // Código: columna Codigo si existe, si no usar Articulo
+    let code = "";
+    if (codigoCol !== -1 && row[codigoCol] != null) {
+      code = String(row[codigoCol]).trim().toLowerCase();
+    } else {
+      code = name.toLowerCase();
+    }
+
+    results.push({ code, name, price: priceRaw });
   }
 
   return results;

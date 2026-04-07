@@ -353,6 +353,42 @@ export default function SyncPage() {
               </table>
             </div>
           </div>
+
+          {/* Productos no encontrados — para crear */}
+          {summary.notFound > 0 && (
+            <div className="mt-6">
+              <h2 className="text-base font-semibold text-gray-800 mb-2">
+                Productos sin match en la tienda ({summary.notFound})
+              </h2>
+              <p className="text-xs text-gray-500 mb-3">
+                Estos códigos están en el Excel pero no existen en la tienda. Habría que crearlos manualmente.
+              </p>
+              <div className="bg-white rounded-xl ring-1 ring-foreground/10 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="px-4 py-3 text-left font-medium text-gray-600 w-36">Código</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Nombre (Excel)</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Precio lista</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview
+                      .filter((item) => item.reason === "No encontrado en la tienda")
+                      .map((item, i) => (
+                        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                          <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{item.code}</td>
+                          <td className="px-4 py-2.5 text-gray-700">{item.name}</td>
+                          <td className="px-4 py-2.5 text-right text-gray-900 font-medium">
+                            {formatPrice(item.newPrice)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

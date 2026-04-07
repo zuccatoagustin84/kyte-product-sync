@@ -37,7 +37,7 @@ export default function Home() {
       query = query.eq("category_id", selectedCategory);
     }
     if (search.trim()) {
-      query = query.ilike("name", `%${search.trim()}%`);
+      query = query.or(`name.ilike.%${search.trim()}%,code.ilike.%${search.trim()}%`);
     }
 
     const { data } = await query.order("sort_order").limit(200);
