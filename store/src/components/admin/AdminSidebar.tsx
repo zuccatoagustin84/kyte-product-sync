@@ -21,7 +21,7 @@ const allNavItems: NavItem[] = [
   { href: "/admin/pedidos", label: "Pedidos", icon: "🛒", permission: "orders" },
   { href: "/admin/categorias", label: "Categorías", icon: "🏷️", permission: "categories" },
   { href: "/admin/usuarios", label: "Usuarios", icon: "👥", permission: "users" },
-  { href: "/admin/sync", label: "Sync Kyte", icon: "🔄", permission: "sync" },
+  { href: "/admin/sync", label: "Actualizar precios", icon: "🔄", permission: "sync" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {

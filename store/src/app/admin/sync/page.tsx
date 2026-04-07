@@ -9,7 +9,7 @@ import type { SyncPreviewItem } from "@/app/api/admin/sync/route";
 type Summary = {
   total: number;
   toUpdate: number;
-  skipped: number;
+  noChange: number;
   notFound: number;
   zeroPrice: number;
 };
@@ -30,7 +30,6 @@ type SyncResponse = {
 export default function SyncPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [token, setToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
@@ -68,7 +67,6 @@ export default function SyncPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      if (token.trim()) form.append("kyte_token", token.trim());
 
       const url = apply ? "/api/admin/sync?apply=true" : "/api/admin/sync";
       const res = await fetch(url, { method: "POST", body: form });
@@ -102,9 +100,9 @@ export default function SyncPage() {
     <div className="p-6 md:p-8 max-w-6xl">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Sync de Precios Kyte</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Actualización masiva de precios</h1>
         <p className="text-gray-500 mt-1">
-          Subi una lista de precios Excel y sincronizá directamente con Kyte POS.
+          Subí la lista de precios Excel y actualizá los precios de la tienda en bulk.
         </p>
       </div>
 
@@ -140,27 +138,6 @@ export default function SyncPage() {
           </div>
           <p className="mt-1.5 text-xs text-gray-400">
             El archivo debe tener columnas &quot;Articulo&quot; y &quot;Precio&quot; (se detectan automáticamente).
-          </p>
-        </div>
-
-        {/* Kyte token */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Kyte Token{" "}
-            <span className="text-gray-400 font-normal">
-              (opcional — si está vacío usa las credenciales del entorno)
-            </span>
-          </label>
-          <Input
-            type="password"
-            placeholder="kyte_token del localStorage de Kyte Web..."
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            className="font-mono text-xs"
-          />
-          <p className="mt-1 text-xs text-gray-400">
-            Extraelo desde el navegador en <code className="bg-gray-100 px-1 rounded">web.kyteapp.com</code>{" "}
-            → DevTools → Application → Local Storage → <code className="bg-gray-100 px-1 rounded">kyte_token</code>
           </p>
         </div>
 
@@ -215,7 +192,7 @@ export default function SyncPage() {
           }`}
         >
           <p className="font-semibold text-gray-900 mb-1">
-            {applyResult.failed === 0 ? "Sincronizacion completada" : "Sincronizacion con errores"}
+            {applyResult.failed === 0 ? "Actualización completada" : "Actualización con errores"}
           </p>
           <p className="text-sm text-gray-600">
             {applyResult.success} productos actualizados correctamente
@@ -250,7 +227,7 @@ export default function SyncPage() {
             />
             <SummaryCard
               label="Sin cambio"
-              value={summary.skipped - summary.notFound - summary.zeroPrice}
+              value={summary.noChange}
               color="gray"
             />
             <SummaryCard
@@ -294,7 +271,7 @@ export default function SyncPage() {
                       Nombre (fuente)
                     </th>
                     <th className="px-4 py-3 text-left font-medium text-gray-600">
-                      Nombre Kyte
+                      Nombre en tienda
                     </th>
                     <th className="px-4 py-3 text-right font-medium text-gray-600">
                       Precio actual
@@ -341,7 +318,7 @@ export default function SyncPage() {
                             {item.name || "—"}
                           </td>
                           <td className="px-4 py-2.5 text-gray-700 max-w-[180px] truncate">
-                            {item.kyteName || <span className="text-gray-300">—</span>}
+                            {item.storeName || <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-4 py-2.5 text-right text-gray-500">
                             {item.currentPrice > 0
@@ -443,7 +420,7 @@ function StatusBadge({ item }: { item: SyncPreviewItem }) {
       </span>
     );
   }
-  if (item.reason === "No encontrado en Kyte") {
+  if (item.reason === "No encontrado en la tienda") {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200">
         Sin match
