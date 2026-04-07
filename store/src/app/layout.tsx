@@ -38,6 +38,9 @@ export default function RootLayout({
           <div className="min-h-screen bg-[#f8f9fa]">{children}</div>
           <Toaster />
         </AuthProvider>
+        <span className="hidden md:block fixed bottom-2 right-3 text-[10px] text-gray-300 select-none pointer-events-none">
+          v{process.env.NEXT_PUBLIC_APP_VERSION}
+        </span>
       </body>
     </html>
   );
