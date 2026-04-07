@@ -29,7 +29,7 @@ export function ProductRow({ product }: { product: Product }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 bg-white border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-b-0">
       {/* Imagen */}
-      <Link href={`/p/${product.id}`} className="shrink-0 relative w-14 h-14 rounded-xl overflow-hidden bg-gray-100">
+      <Link href={`/p/${product.id}`} className="shrink-0 relative w-14 h-14 rounded-xl overflow-hidden bg-gray-100 ring-2 ring-transparent hover:ring-[#e85d04] transition-all duration-300">
         {product.image_url ? (
           <Image src={product.image_url} alt={product.name} fill sizes="56px" className="object-contain p-1" unoptimized />
         ) : (
