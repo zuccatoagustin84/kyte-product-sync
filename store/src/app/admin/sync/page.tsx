@@ -212,7 +212,7 @@ export default function SyncPage() {
             <ul className="mt-2 text-xs text-red-700 space-y-1">
               {applyResult.errors.map((e, i) => (
                 <li key={i}>
-                  <span className="font-mono">{e.code}</span> — {e.name}: {e.error}
+                  <span className="font-mono">{e.code}</span> — {e.error}
                 </li>
               ))}
             </ul>
