@@ -100,7 +100,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 alt={product.name}
                 fill
                 sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-cover rounded-xl"
+                className="object-contain rounded-xl p-2"
                 unoptimized
               />
             ) : (
@@ -148,7 +148,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                     alt={`Imagen ${idx + 1}`}
                     fill
                     sizes="64px"
-                    className="object-cover"
+                    className="object-contain p-1"
                     unoptimized
                   />
                 </button>
@@ -343,7 +343,7 @@ function RelatedCard({ product }: { product: Product }) {
               alt={product.name}
               fill
               sizes="(max-width: 768px) 50vw, 25vw"
-              className="object-cover"
+              className="object-contain p-1"
               unoptimized
             />
           ) : (
