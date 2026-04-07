@@ -2,7 +2,6 @@
 
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { formatPrice } from "@/lib/format";
 import type { SyncPreviewItem } from "@/app/api/admin/sync/route";
 
@@ -93,8 +92,6 @@ export default function SyncPage() {
     if (filterMode === "skip") return !item.willUpdate;
     return true;
   });
-
-  const hasEnvToken = !token.trim(); // if no token entered, uses env/default
 
   return (
     <div className="p-6 md:p-8 max-w-6xl">
