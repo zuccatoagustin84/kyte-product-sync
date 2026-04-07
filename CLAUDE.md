@@ -115,5 +115,4 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 ## Next steps
 - Firmar el .exe con un certificado (opcional, evita warnings de Windows Defender)
 - Dominio custom para la tienda mayorista
-- Ejecutar migración SQL `store/supabase-migration-product-images.sql` en Supabase
 - Crear usuario admin en staging via `/setup` para validar el RBAC
