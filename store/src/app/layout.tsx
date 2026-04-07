@@ -39,7 +39,7 @@ export default function RootLayout({
           <Toaster />
         </AuthProvider>
         <span className="hidden md:block fixed bottom-2 right-3 text-[10px] text-gray-300 select-none pointer-events-none">
-          v{process.env.NEXT_PUBLIC_APP_VERSION}
+          v{process.env.NEXT_PUBLIC_APP_VERSION} · {process.env.NEXT_PUBLIC_BUILD_TIME}
         </span>
       </body>
     </html>
