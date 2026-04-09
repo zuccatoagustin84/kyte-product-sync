@@ -4,13 +4,19 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Category } from "@/lib/types";
 
+type Mode = "grid" | "list";
+
 export default function CatalogoPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCat, setSelectedCat] = useState<string>("__all__");
   const [showPrices, setShowPrices] = useState(true);
+  const [mode, setMode] = useState<Mode>("grid");
   const [loading, setLoading] = useState(false);
   const [loadingCats, setLoadingCats] = useState(true);
-  const [status, setStatus] = useState<{ kind: "info" | "error" | "success"; text: string } | null>(null);
+  const [status, setStatus] = useState<{
+    kind: "info" | "error" | "success";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -20,7 +26,10 @@ export default function CatalogoPage() {
         if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
         setCategories(data.categories ?? []);
       } catch (e) {
-        setStatus({ kind: "error", text: `Error cargando categorías: ${(e as Error).message}` });
+        setStatus({
+          kind: "error",
+          text: `Error cargando categorías: ${(e as Error).message}`,
+        });
       } finally {
         setLoadingCats(false);
       }
@@ -29,7 +38,10 @@ export default function CatalogoPage() {
 
   async function generateCatalog() {
     setLoading(true);
-    setStatus({ kind: "info", text: "Generando catálogo..." });
+    setStatus({
+      kind: "info",
+      text: "Generando PDF... esto puede tardar si hay muchos productos con imágenes.",
+    });
 
     try {
       const selected = categories.find((c) => c.id === selectedCat);
@@ -39,6 +51,7 @@ export default function CatalogoPage() {
         body: JSON.stringify({
           filterCategory: selectedCat === "__all__" ? undefined : selected?.name,
           showPrices,
+          mode,
           companyName: "MP.TOOLS MAYORISTA",
         }),
       });
@@ -48,8 +61,7 @@ export default function CatalogoPage() {
         throw new Error(data.error ?? `Error ${res.status}`);
       }
 
-      const html = await res.text();
-      const blob = new Blob([html], { type: "text/html" });
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -62,14 +74,13 @@ export default function CatalogoPage() {
               .replace(/[\u0300-\u036f]/g, "")
               .replace(/[^a-z0-9]+/g, "_")
               .replace(/^_|_$/g, "");
-      a.download = `catalogo_${catSlug}_${new Date().toISOString().slice(0, 10)}.html`;
+      a.download = `catalogo_${catSlug}_${mode}_${new Date()
+        .toISOString()
+        .slice(0, 10)}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
 
-      setStatus({
-        kind: "success",
-        text: "Catálogo descargado. Abrilo en Chrome y usá Ctrl+P para guardarlo como PDF.",
-      });
+      setStatus({ kind: "success", text: "PDF descargado correctamente." });
     } catch (e) {
       setStatus({ kind: "error", text: `Error: ${(e as Error).message}` });
     } finally {
@@ -83,12 +94,34 @@ export default function CatalogoPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Generar catálogo</h1>
         <p className="text-gray-500 mt-1">
-          Generá un catálogo HTML imprimible con los productos de la tienda.
+          Generá un catálogo PDF con los productos de la tienda. Elegí entre
+          cuadrícula (con imágenes grandes) o lista compacta.
         </p>
       </div>
 
       {/* Form card */}
       <div className="bg-white rounded-xl ring-1 ring-foreground/10 p-6 mb-6 space-y-5">
+        {/* Mode selector */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Formato
+          </label>
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+            <ModeButton
+              active={mode === "grid"}
+              onClick={() => setMode("grid")}
+              label="Cuadrícula"
+              description="3 productos por fila"
+            />
+            <ModeButton
+              active={mode === "list"}
+              onClick={() => setMode("list")}
+              label="Lista"
+              description="una línea por producto"
+            />
+          </div>
+        </div>
+
         {/* Category selector */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -136,10 +169,10 @@ export default function CatalogoPage() {
           >
             {loading ? (
               <span className="flex items-center gap-2">
-                <Spinner /> Generando...
+                <Spinner /> Generando PDF...
               </span>
             ) : (
-              "Generar y descargar catálogo HTML"
+              "Generar y descargar PDF"
             )}
           </Button>
         </div>
@@ -162,17 +195,54 @@ export default function CatalogoPage() {
 
       {/* Help card */}
       <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 text-xs text-gray-600 space-y-1">
-        <p className="font-medium text-gray-800 mb-1">
-          Para imprimir o guardar como PDF:
-        </p>
-        <p>1. Abrir el HTML descargado en Chrome.</p>
-        <p>2. Ctrl+P (⌘+P en Mac) → Guardar como PDF.</p>
+        <p className="font-medium text-gray-800 mb-1">Notas</p>
         <p>
-          3. En configuración: activar &quot;Gráficos de fondo&quot; para conservar los
-          colores y fondos.
+          • Los productos nunca se cortan entre páginas: cada tarjeta / fila se
+          mantiene entera.
+        </p>
+        <p>
+          • Cada categoría arranca en una página nueva con encabezado fijo en
+          cada hoja.
+        </p>
+        <p>
+          • Si un producto no tiene imagen (o la imagen no pudo descargarse),
+          aparece un placeholder.
         </p>
       </div>
     </div>
+  );
+}
+
+function ModeButton({
+  active,
+  onClick,
+  label,
+  description,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-4 py-2 text-left transition-colors ${
+        active
+          ? "bg-[#1a1a2e] text-white"
+          : "bg-white text-gray-700 hover:bg-gray-50"
+      }`}
+    >
+      <div className="text-sm font-medium">{label}</div>
+      <div
+        className={`text-[11px] ${
+          active ? "text-white/60" : "text-gray-400"
+        }`}
+      >
+        {description}
+      </div>
+    </button>
   );
 }
 
