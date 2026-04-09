@@ -3,8 +3,8 @@
 export type Role = "admin" | "operador" | "user";
 
 export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
-  admin: ["products", "orders", "users", "sync", "categories"],
-  operador: ["products", "orders", "categories"],
+  admin: ["products", "orders", "users", "sync", "categories", "catalog"],
+  operador: ["products", "orders", "categories", "catalog"],
   user: [],
 } as const;
 

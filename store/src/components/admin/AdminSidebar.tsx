@@ -22,6 +22,7 @@ const allNavItems: NavItem[] = [
   { href: "/admin/categorias", label: "Categorías", icon: "🏷️", permission: "categories" },
   { href: "/admin/usuarios", label: "Usuarios", icon: "👥", permission: "users" },
   { href: "/admin/sync", label: "Actualizar precios", icon: "🔄", permission: "sync" },
+  { href: "/admin/catalogo", label: "Generar catálogo", icon: "📄", permission: "catalog" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
