@@ -201,3 +201,32 @@
 .animate-toast {
   animation: slideUpFadeOut 3.2s ease forwards;
 }
+
+/* ── Print styles ──────────────────────────────────────────── */
+@media print {
+  /* Hide interactive elements */
+  header,
+  [data-cart],
+  button,
+  nav {
+    display: none !important;
+  }
+
+  /* Image padding so photos don't bleed edge-to-edge */
+  .aspect-square img,
+  img[class*="object-contain"],
+  img[class*="object-cover"] {
+    padding: 6px !important;
+    object-fit: contain !important;
+  }
+
+  /* Product cards: no shadows, keep border */
+  [class*="rounded"] {
+    box-shadow: none !important;
+  }
+
+  /* Avoid cutting cards across pages */
+  [class*="flex-col"] {
+    break-inside: avoid;
+  }
+}
