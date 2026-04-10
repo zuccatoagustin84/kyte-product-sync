@@ -7,9 +7,32 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 
+import base64 as _b64
+import json as _json
+
 from kyte_api import KyteClient, KyteConfig, KyteAPIError, parse_kyte_token
 from generate_catalog import build_categories, build_image_url
 from jinja2 import Environment, FileSystemLoader
+
+
+def _token_days_left(token: str) -> int | None:
+    """Días restantes hasta el vencimiento del kyte_token. None si no se puede parsear."""
+    try:
+        t = token.strip()
+        pad = 4 - len(t) % 4
+        if pad != 4:
+            t += "=" * pad
+        decoded = _b64.b64decode(t).decode("utf-8")
+        parts = decoded.split(".")
+        if len(parts) < 3:
+            return None
+        pb = parts[2] + "=" * (4 - len(parts[2]) % 4)
+        exp = _json.loads(_b64.b64decode(pb)).get("exp")
+        if exp:
+            return (datetime.fromtimestamp(exp) - datetime.now()).days
+    except Exception:
+        pass
+    return None
 try:
     from streamlit_javascript import st_javascript
     HAS_JS = True
@@ -51,12 +74,16 @@ if HAS_JS and token:
     import json as _json
     st_javascript(f"localStorage.setItem('kyte_sync_token', {_json.dumps(token)})")
 
-# Botón para limpiar
-if token and st.sidebar.button("Limpiar token guardado"):
+# Botones de gestión del token
+_col1, _col2 = st.sidebar.columns(2)
+if _col1.button("↺ Leer de Kyte", help="Lee el kyte_token fresco de Kyte web (requiere tenerlo abierto en este browser)", disabled=not HAS_JS):
+    st_javascript("localStorage.removeItem('kyte_sync_token')")
+    st.session_state.pop("kyte_token_input", None)
+    st.rerun()
+if _col2.button("✕ Limpiar", help="Borra el token guardado", disabled=not token):
     if HAS_JS:
         st_javascript("localStorage.removeItem('kyte_sync_token')")
-    st.session_state.token_from_storage = ""
-    del st.session_state["kyte_token_input"]
+    st.session_state.pop("kyte_token_input", None)
     st.rerun()
 
 update_cost = st.sidebar.checkbox("Actualizar costo tambien", value=True)
@@ -78,7 +105,14 @@ if not token:
 # Parse token
 try:
     uid, aid = parse_kyte_token(token)
-    st.sidebar.success(f"Conectado (aid: {aid[:8]}...)")
+    days = _token_days_left(token)
+    if days is not None and days < 30:
+        st.sidebar.error(f"⚠️ Token vence en {days} días — renovalo")
+    elif days is not None and days < 90:
+        st.sidebar.warning(f"Token vence en {days} días")
+    else:
+        label = f"Conectado · {days}d restantes" if days else f"Conectado ({aid[:8]}…)"
+        st.sidebar.success(label)
 except Exception as e:
     st.sidebar.error(f"Token invalido: {e}")
     st.stop()

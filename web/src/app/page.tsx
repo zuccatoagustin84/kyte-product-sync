@@ -43,19 +43,41 @@ function TokenPanel({
   onTokenChange: (token: string) => void;
   onClear: () => void;
 }) {
+  const daysLeft = tokenInfo?.exp
+    ? Math.ceil((tokenInfo.exp.getTime() - Date.now()) / 86_400_000)
+    : null;
+
+  const handleReadFromKyte = () => {
+    const fresh = localStorage.getItem("kyte_token");
+    if (fresh?.trim()) {
+      onTokenChange(fresh.trim());
+    } else {
+      alert("No se encontró kyte_token en localStorage.\nAsegurate de tener Kyte web abierto en este browser.");
+    }
+  };
+
   return (
     <Card className="mb-4">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold">Kyte Token</CardTitle>
-          {token && (
+          <div className="flex items-center gap-3">
             <button
-              onClick={onClear}
-              className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+              onClick={handleReadFromKyte}
+              className="text-xs text-blue-500 hover:text-blue-700 transition-colors"
+              title="Lee el kyte_token fresco del localStorage de Kyte web"
             >
-              Limpiar
+              ↺ Leer de Kyte
             </button>
-          )}
+            {token && (
+              <button
+                onClick={onClear}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -85,16 +107,25 @@ function TokenPanel({
           onChange={(e) => onTokenChange(e.target.value)}
         />
         {tokenInfo && (
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <Badge variant="outline" className="text-xs">
               aid: {tokenInfo.aid.slice(0, 8)}…
             </Badge>
-            {tokenInfo.exp && (
-              <Badge variant="outline" className="text-xs">
-                Expira: {tokenInfo.exp.toLocaleDateString("es-AR")}
+            {daysLeft !== null && (
+              <Badge
+                variant="outline"
+                className={`text-xs ${
+                  daysLeft < 30
+                    ? "border-red-300 text-red-600 bg-red-50"
+                    : daysLeft < 90
+                    ? "border-yellow-300 text-yellow-700 bg-yellow-50"
+                    : "border-green-300 text-green-700"
+                }`}
+              >
+                {daysLeft < 30 ? "⚠️ " : ""}Vence en {daysLeft}d
               </Badge>
             )}
-            <Badge className="text-xs bg-green-600">✓ Token guardado</Badge>
+            <Badge className="text-xs bg-green-600">✓ Guardado</Badge>
           </div>
         )}
       </CardContent>
