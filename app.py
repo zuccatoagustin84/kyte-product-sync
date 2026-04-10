@@ -36,7 +36,7 @@ if HAS_JS:
     _saved = st_javascript(
         "localStorage.getItem('kyte_sync_token') || localStorage.getItem('kyte_token') || ''"
     )
-    if isinstance(_saved, str) and _saved.strip() and "kyte_token_input" not in st.session_state:
+    if isinstance(_saved, str) and _saved.strip() and not st.session_state.get("kyte_token_input", "").strip():
         st.session_state.kyte_token_input = _saved.strip()
 
 token = st.sidebar.text_area(
