@@ -99,18 +99,18 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 
 ## Proceso de trabajo — Tienda Mayorista
 
-**SIEMPRE seguir este flujo para cambios en `store/`:**
+**Por defecto: commitear y pushear directo a `main`.**
+
+Solo crear rama + PR + preview de Vercel cuando el usuario lo pida explícitamente.
+Cuando el usuario pida PR/preview, seguir este flujo:
 
 1. Crear rama: `git checkout -b feature/nombre-feature`
 2. Desarrollar y commitear en la rama
 3. Push: `git push origin feature/nombre-feature`
-   → CI deployea automáticamente a **staging** (Supabase staging)
-4. Validar en la URL preview de staging
-5. Crear PR: `feature/nombre-feature` → `main`
-6. Revisar y mergear el PR
-   → CI deployea automáticamente a **producción**
-
-**NUNCA pushear directo a `main` con cambios de store sin validar en staging primero.**
+   → Vercel deployea automáticamente una **preview URL**
+4. Crear PR: `feature/nombre-feature` → `main`
+5. El usuario revisa la preview y mergea el PR
+   → Vercel deployea automáticamente a **producción**
 
 ## Next steps
 - Firmar el .exe con un certificado (opcional, evita warnings de Windows Defender)
