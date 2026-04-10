@@ -256,8 +256,9 @@ ${{ "{:,.0f}".format(value) | replace(",", ".") }}
     .card-image-wrap img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       display: block;
+      padding: 8px;
     }
     .card-image-placeholder {
       width: 100%;
@@ -381,6 +382,7 @@ ${{ "{:,.0f}".format(value) | replace(",", ".") }}
       }
 
       .card-image-wrap { max-height: 130px; }
+      .card-image-wrap img { padding: 6px; }
       .card-name   { font-size: 7.5pt; }
       .card-code   { font-size: 6.5pt; }
       .card-price-value { font-size: 9pt; }

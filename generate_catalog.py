@@ -74,16 +74,28 @@ def build_categories(
     session: requests.Session | None = None,
     filter_category: str | None = None,
     show_prices: bool = True,
+    category_order: list[str] | None = None,
 ) -> list[dict]:
-    """Agrupa productos por categoría y construye las URLs de imagen."""
+    """Agrupa productos por categoría y construye las URLs de imagen.
+
+    Args:
+        category_order: si se provee, usa ese orden y solo incluye esas categorías.
+                        Si es None, ordena alfabéticamente (o filtra por filter_category).
+    """
 
     buckets: dict[str, list] = defaultdict(list)
 
     total = len(products)
     for i, p in enumerate(products):
         cat_name = normalize_category(p)
-        if filter_category and cat_name.lower() != filter_category.lower():
-            continue
+
+        # Filtrar por categoría (CLI) o por lista de categorías seleccionadas
+        if category_order is not None:
+            if cat_name not in category_order:
+                continue
+        elif filter_category:
+            if cat_name.lower() != filter_category.lower():
+                continue
 
         raw_image = p.get("image") or p.get("imageThumb") or ""
         image_url = build_image_url(raw_image, uid) if raw_image else None
@@ -109,9 +121,14 @@ def build_categories(
     if embed_images:
         print()
 
-    # Ordenar: categorías alfabéticamente, productos por nombre dentro
+    # Ordenar: usar category_order si se provee, sino alfabéticamente
+    if category_order is not None:
+        ordered_names = [n for n in category_order if n in buckets]
+    else:
+        ordered_names = sorted(buckets.keys())
+
     result = []
-    for cat_name in sorted(buckets.keys()):
+    for cat_name in ordered_names:
         prods = sorted(buckets[cat_name], key=lambda x: x["name"].lower())
         result.append({"name": cat_name, "products": prods})
 

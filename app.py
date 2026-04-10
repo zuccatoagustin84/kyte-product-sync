@@ -213,31 +213,73 @@ if page == "Catalogo de Productos":
     st.subheader("Catalogo de Productos")
     st.caption("Genera un catálogo HTML imprimible agrupado por categoría")
 
-    col_a, col_b = st.columns(2)
-    filter_cat = col_a.text_input("Filtrar por categoría (opcional)", placeholder="Ej: Herramientas")
-    show_prices = col_b.checkbox("Mostrar precios en el catálogo", value=True)
+    # ── Paso 1: Cargar productos desde Kyte ──────────────────
+    if "catalog_prods" not in st.session_state:
+        if st.button("Cargar categorías desde Kyte", type="primary"):
+            with st.spinner("Descargando productos de Kyte..."):
+                try:
+                    prods = client.get_products()
+                    # Extraer categorías únicas
+                    cats = sorted(set(
+                        (p.get("category") or {}).get("name", "").strip() or "Sin categoría"
+                        for p in prods
+                    ))
+                    st.session_state.catalog_prods = prods
+                    st.session_state.catalog_cats = cats
+                except KyteAPIError as e:
+                    st.error(f"Error de API: {e}")
+        st.stop()
 
+    # ── Paso 2: Selección y orden de categorías ───────────────
+    try:
+        from streamlit_sortables import sort_items
+        HAS_SORTABLES = True
+    except ImportError:
+        HAS_SORTABLES = False
+
+    all_cats = st.session_state.catalog_cats
+
+    col_a, col_b = st.columns([3, 1])
+    with col_a:
+        selected_cats = st.multiselect(
+            "Categorías a incluir",
+            options=all_cats,
+            default=all_cats,
+            key="cat_multiselect",
+        )
+    with col_b:
+        show_prices = st.checkbox("Mostrar precios", value=True)
+        if st.button("↺ Recargar Kyte"):
+            del st.session_state.catalog_prods
+            del st.session_state.catalog_cats
+            st.rerun()
+
+    if not selected_cats:
+        st.warning("Seleccioná al menos una categoría.")
+        st.stop()
+
+    if HAS_SORTABLES:
+        st.caption("Arrastrá para cambiar el orden en el catálogo:")
+        ordered_cats = sort_items(selected_cats, key="cat_order")
+    else:
+        ordered_cats = selected_cats
+        st.caption(f"{len(selected_cats)} categorías seleccionadas")
+
+    # ── Paso 3: Generar catálogo ──────────────────────────────
     if st.button("Generar catálogo", type="primary"):
-        with st.spinner("Descargando productos de Kyte..."):
-            try:
-                kyte_prods = client.get_products()
-            except KyteAPIError as e:
-                st.error(f"Error de API: {e}")
-                st.stop()
-
+        kyte_prods = st.session_state.catalog_prods
         with st.spinner(f"Armando catálogo de {len(kyte_prods)} productos..."):
             categories = build_categories(
                 kyte_prods,
                 uid=uid,
                 embed_images=False,
-                filter_category=filter_cat.strip() if filter_cat.strip() else None,
                 show_prices=show_prices,
+                category_order=ordered_cats,
             )
 
         total_cat = sum(len(c["products"]) for c in categories)
         st.success(f"{len(categories)} categorías · {total_cat} productos")
 
-        # Render template
         tmpl_path = Path("catalog_template.html")
         if not tmpl_path.exists():
             st.error("No se encontró catalog_template.html")
