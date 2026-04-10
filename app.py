@@ -29,20 +29,18 @@ st.title("Kyte Price Sync")
 st.sidebar.header("Configuracion")
 
 # ── Leer token guardado en localStorage del browser ───────────
-if HAS_JS and "token_from_storage" not in st.session_state:
+# st_javascript retorna None en el primer render y el valor real en el siguiente.
+# Solo seteamos la session_state del widget cuando tenemos un valor real,
+# así no bloqueamos la lectura con un "" prematuro.
+if HAS_JS:
     _saved = st_javascript(
         "localStorage.getItem('kyte_sync_token') || localStorage.getItem('kyte_token') || ''"
     )
-    if isinstance(_saved, str) and _saved.strip():
-        st.session_state.token_from_storage = _saved.strip()
-    else:
-        st.session_state.token_from_storage = ""
-
-_default_token = st.session_state.get("token_from_storage", "")
+    if isinstance(_saved, str) and _saved.strip() and "kyte_token_input" not in st.session_state:
+        st.session_state.kyte_token_input = _saved.strip()
 
 token = st.sidebar.text_area(
     "Kyte Token",
-    value=_default_token,
     height=68,
     help="Se guarda automáticamente en el browser. Para obtenerlo: F12 > Console > copy(localStorage.getItem('kyte_token'))",
     key="kyte_token_input",
