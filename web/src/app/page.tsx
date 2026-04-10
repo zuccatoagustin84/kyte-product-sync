@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,40 +30,59 @@ interface TokenInfo {
 
 // ── Token Panel ──────────────────────────────────────────────────────────────
 
+const LS_KEY = "kyte_sync_token";
+
 function TokenPanel({
+  token,
   tokenInfo,
   onTokenChange,
+  onClear,
 }: {
+  token: string;
   tokenInfo: TokenInfo | null;
   onTokenChange: (token: string) => void;
+  onClear: () => void;
 }) {
   return (
     <Card className="mb-4">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold">Kyte Token</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-semibold">Kyte Token</CardTitle>
+          {token && (
+            <button
+              onClick={onClear}
+              className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        <p className="text-xs text-muted-foreground">
-          F12 → Console →{" "}
-          <code
-            className="bg-green-50 text-green-700 px-1 py-0.5 rounded text-xs font-mono cursor-pointer select-all border border-green-200"
-            onClick={(e) => {
-              const sel = window.getSelection();
-              const range = document.createRange();
-              range.selectNodeContents(e.currentTarget);
-              sel?.removeAllRanges();
-              sel?.addRange(range);
-              navigator.clipboard.writeText(e.currentTarget.innerText).catch(() => {});
-            }}
-            title="Click para copiar"
-          >
-            copy(localStorage.getItem(&apos;kyte_token&apos;))
-          </code>
-        </p>
+        {!tokenInfo && (
+          <p className="text-xs text-muted-foreground">
+            F12 → Console →{" "}
+            <code
+              className="bg-green-50 text-green-700 px-1 py-0.5 rounded text-xs font-mono cursor-pointer select-all border border-green-200"
+              onClick={(e) => {
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(e.currentTarget);
+                sel?.removeAllRanges();
+                sel?.addRange(range);
+                navigator.clipboard.writeText(e.currentTarget.innerText).catch(() => {});
+              }}
+              title="Click para copiar"
+            >
+              copy(localStorage.getItem(&apos;kyte_token&apos;))
+            </code>
+          </p>
+        )}
         <Textarea
           placeholder="Pegar token acá..."
           className="font-mono text-xs h-20 resize-none"
-          onChange={(e) => onTokenChange(e.target.value.trim())}
+          value={token}
+          onChange={(e) => onTokenChange(e.target.value)}
         />
         {tokenInfo && (
           <div className="flex gap-2 flex-wrap">
@@ -75,7 +94,7 @@ function TokenPanel({
                 Expira: {tokenInfo.exp.toLocaleDateString("es-AR")}
               </Badge>
             )}
-            <Badge className="text-xs bg-green-600">Conectado</Badge>
+            <Badge className="text-xs bg-green-600">✓ Token guardado</Badge>
           </div>
         )}
       </CardContent>
@@ -492,18 +511,34 @@ export default function Home() {
   const [token, setToken] = useState("");
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
 
-  const handleTokenChange = useCallback((raw: string) => {
-    setToken(raw);
-    if (!raw) {
+  const applyToken = useCallback((raw: string) => {
+    const trimmed = raw.trim();
+    setToken(trimmed);
+    if (!trimmed) {
       setTokenInfo(null);
       return;
     }
     try {
-      const { uid, aid, exp } = parseKyteToken(raw);
+      const { uid, aid, exp } = parseKyteToken(trimmed);
       setTokenInfo({ uid, aid, exp });
+      localStorage.setItem(LS_KEY, trimmed);
     } catch {
       setTokenInfo(null);
     }
+  }, []);
+
+  // Cargar token guardado al iniciar
+  useEffect(() => {
+    const saved =
+      localStorage.getItem(LS_KEY) || localStorage.getItem("kyte_token");
+    if (saved?.trim()) applyToken(saved.trim());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleClear = useCallback(() => {
+    setToken("");
+    setTokenInfo(null);
+    localStorage.removeItem(LS_KEY);
   }, []);
 
   return (
@@ -525,7 +560,12 @@ export default function Home() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
-        <TokenPanel tokenInfo={tokenInfo} onTokenChange={handleTokenChange} />
+        <TokenPanel
+          token={token}
+          tokenInfo={tokenInfo}
+          onTokenChange={applyToken}
+          onClear={handleClear}
+        />
 
         <Card>
           <CardContent className="pt-5">

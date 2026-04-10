@@ -10,6 +10,11 @@ from pathlib import Path
 from kyte_api import KyteClient, KyteConfig, KyteAPIError, parse_kyte_token
 from generate_catalog import build_categories, build_image_url
 from jinja2 import Environment, FileSystemLoader
+try:
+    from streamlit_javascript import st_javascript
+    HAS_JS = True
+except ImportError:
+    HAS_JS = False
 
 # ── Page config ──────────────────────────────────────────────
 st.set_page_config(
@@ -23,11 +28,38 @@ st.title("Kyte Price Sync")
 # ── Sidebar: Config ──────────────────────────────────────────
 st.sidebar.header("Configuracion")
 
+# ── Leer token guardado en localStorage del browser ───────────
+if HAS_JS and "token_from_storage" not in st.session_state:
+    _saved = st_javascript(
+        "localStorage.getItem('kyte_sync_token') || localStorage.getItem('kyte_token') || ''"
+    )
+    if isinstance(_saved, str) and _saved.strip():
+        st.session_state.token_from_storage = _saved.strip()
+    else:
+        st.session_state.token_from_storage = ""
+
+_default_token = st.session_state.get("token_from_storage", "")
+
 token = st.sidebar.text_area(
     "Kyte Token",
+    value=_default_token,
     height=68,
-    help="Pegalo desde la consola del browser (F12 > Console > copy(localStorage.getItem('kyte_token')))",
+    help="Se guarda automáticamente en el browser. Para obtenerlo: F12 > Console > copy(localStorage.getItem('kyte_token'))",
+    key="kyte_token_input",
 ).strip()
+
+# Guardar en localStorage cada vez que cambia
+if HAS_JS and token:
+    import json as _json
+    st_javascript(f"localStorage.setItem('kyte_sync_token', {_json.dumps(token)})")
+
+# Botón para limpiar
+if token and st.sidebar.button("Limpiar token guardado"):
+    if HAS_JS:
+        st_javascript("localStorage.removeItem('kyte_sync_token')")
+    st.session_state.token_from_storage = ""
+    del st.session_state["kyte_token_input"]
+    st.rerun()
 
 update_cost = st.sidebar.checkbox("Actualizar costo tambien", value=True)
 
