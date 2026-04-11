@@ -56,9 +56,14 @@ st.sidebar.header("Configuracion")
 # Solo seteamos la session_state del widget cuando tenemos un valor real,
 # así no bloqueamos la lectura con un "" prematuro.
 if HAS_JS:
-    _saved = st_javascript(
-        "localStorage.getItem('kyte_sync_token') || localStorage.getItem('kyte_token') || ''"
-    )
+    if st.session_state.pop("_clear_saved_token", False):
+        # Solo leer el token original de Kyte web (ignorar el guardado por nuestra app)
+        st_javascript("localStorage.removeItem('kyte_sync_token')")
+        _saved = st_javascript("localStorage.getItem('kyte_token') || ''")
+    else:
+        _saved = st_javascript(
+            "localStorage.getItem('kyte_sync_token') || localStorage.getItem('kyte_token') || ''"
+        )
     if isinstance(_saved, str) and _saved.strip() and not st.session_state.get("kyte_token_input", "").strip():
         st.session_state.kyte_token_input = _saved.strip()
 
@@ -77,7 +82,7 @@ if HAS_JS and token:
 # Botones de gestión del token
 _col1, _col2 = st.sidebar.columns(2)
 if _col1.button("↺ Leer de Kyte", help="Lee el kyte_token fresco de Kyte web (requiere tenerlo abierto en este browser)", disabled=not HAS_JS):
-    st_javascript("localStorage.removeItem('kyte_sync_token')")
+    st.session_state["_clear_saved_token"] = True
     st.session_state.pop("kyte_token_input", None)
     st.rerun()
 if _col2.button("✕ Limpiar", help="Borra el token guardado", disabled=not token):
