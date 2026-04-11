@@ -352,7 +352,6 @@ if page == "Catalogo de Productos":
             )
 
         total_cat = sum(len(c["products"]) for c in categories)
-        st.success(f"{len(categories)} categorías · {total_cat} productos")
 
         tmpl_name = "catalog_list_template.html" if catalog_format == "Lista con imágenes" else "catalog_template.html"
         tmpl_path = Path(tmpl_name)
@@ -379,35 +378,47 @@ if page == "Catalogo de Productos":
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         fmt_suffix = "lista" if catalog_format == "Lista con imágenes" else "catalogo"
         price_suffix = "" if show_prices else "_sin_precio"
-        base_name = f"{fmt_suffix}{price_suffix}_{ts}"
 
-        # Generar PDF
-        pdf_bytes = None
-        try:
-            from weasyprint import HTML as WeasyHTML
-            with st.spinner("Generando PDF..."):
-                pdf_bytes = WeasyHTML(string=html_out).write_pdf()
-        except Exception as e:
-            st.warning(f"No se pudo generar el PDF: {e}")
+        st.session_state.catalog_html = html_out
+        st.session_state.catalog_base_name = f"{fmt_suffix}{price_suffix}_{ts}"
+        st.session_state.catalog_total = total_cat
+        st.session_state.catalog_n_cats = len(categories)
+        # Limpiar PDF anterior si había
+        st.session_state.pop("catalog_pdf", None)
 
-        dl_col1, dl_col2 = st.columns(2)
-        with dl_col1:
+    # ── Paso 4: Mostrar descargas ────────────────────────────
+    if "catalog_html" in st.session_state:
+        html_out = st.session_state.catalog_html
+        base_name = st.session_state.catalog_base_name
+        st.success(f"{st.session_state.catalog_n_cats} categorías · {st.session_state.catalog_total} productos")
+
+        st.download_button(
+            label="Descargar HTML",
+            data=html_out.encode("utf-8"),
+            file_name=f"{base_name}.html",
+            mime="text/html",
+        )
+
+        st.divider()
+
+        # ── Paso 5: Generar PDF (opcional) ───────────────────
+        if "catalog_pdf" not in st.session_state:
+            if st.button("Generar PDF"):
+                try:
+                    from weasyprint import HTML as WeasyHTML
+                    with st.spinner("Generando PDF (puede tardar unos segundos)..."):
+                        pdf_bytes = WeasyHTML(string=html_out).write_pdf()
+                    st.session_state.catalog_pdf = pdf_bytes
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"No se pudo generar el PDF: {e}")
+        else:
             st.download_button(
-                label="Descargar HTML",
-                data=html_out.encode("utf-8"),
-                file_name=f"{base_name}.html",
-                mime="text/html",
+                label="Descargar PDF",
+                data=st.session_state.catalog_pdf,
+                file_name=f"{base_name}.pdf",
+                mime="application/pdf",
             )
-        with dl_col2:
-            if pdf_bytes:
-                st.download_button(
-                    label="Descargar PDF",
-                    data=pdf_bytes,
-                    file_name=f"{base_name}.pdf",
-                    mime="application/pdf",
-                )
-            else:
-                st.info("PDF no disponible — descargá el HTML y usá Chrome → Ctrl+P")
 
     st.stop()
 
