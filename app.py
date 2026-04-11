@@ -312,6 +312,11 @@ if page == "Catalogo de Productos":
             key="cat_multiselect",
         )
     with col_b:
+        catalog_format = st.radio(
+            "Formato",
+            ["Catálogo (grilla)", "Lista con imágenes"],
+            key="catalog_format",
+        )
         show_prices = st.checkbox("Mostrar precios", value=True)
         if st.button("↺ Recargar Kyte"):
             del st.session_state.catalog_prods
@@ -344,13 +349,14 @@ if page == "Catalogo de Productos":
         total_cat = sum(len(c["products"]) for c in categories)
         st.success(f"{len(categories)} categorías · {total_cat} productos")
 
-        tmpl_path = Path("catalog_template.html")
+        tmpl_name = "catalog_list_template.html" if catalog_format == "Lista con imágenes" else "catalog_template.html"
+        tmpl_path = Path(tmpl_name)
         if not tmpl_path.exists():
-            st.error("No se encontró catalog_template.html")
+            st.error(f"No se encontró {tmpl_name}")
             st.stop()
 
         env = Environment(loader=FileSystemLoader("."), autoescape=True)
-        template = env.get_template("catalog_template.html")
+        template = env.get_template(tmpl_name)
 
         now = datetime.now()
         months_es = ["enero","febrero","marzo","abril","mayo","junio",
@@ -362,13 +368,16 @@ if page == "Catalogo de Productos":
             generated_date=gen_date,
             total_products=total_cat,
             categories=categories,
+            show_prices=show_prices,
         )
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        fmt_suffix = "lista" if catalog_format == "Lista con imágenes" else "catalogo"
+        price_suffix = "" if show_prices else "_sin_precio"
         st.download_button(
             label="Descargar catálogo HTML",
             data=html_out.encode("utf-8"),
-            file_name=f"catalogo_{ts}.html",
+            file_name=f"{fmt_suffix}{price_suffix}_{ts}.html",
             mime="text/html",
         )
         st.info("Para imprimir o guardar como PDF: abrí el archivo en Chrome → Ctrl+P → Guardar como PDF")

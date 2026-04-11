@@ -1,11 +1,12 @@
 {#
-  MP.TOOLS MAYORISTA — Catálogo de Productos
+  MP.TOOLS MAYORISTA — Catálogo Lista con Imágenes
   Template Jinja2. Variables de contexto:
     company_name    (str)
     generated_date  (str)
     total_products  (int)
+    show_prices     (bool)
     categories      (list de {name: str, products: list})
-    Cada producto:  {name, code, salePrice, image_url, has_image}
+    Cada producto:  {name, code, salePrice, image_url, has_image, show_price}
 #}
 {%- macro format_price(value) -%}
 ${{ "{:,.0f}".format(value) | replace(",", ".") }}
@@ -163,14 +164,14 @@ ${{ "{:,.0f}".format(value) | replace(",", ".") }}
     .category-section {
       width: 210mm;
       margin: 0 auto 2rem;
-      background: var(--gray-light);
+      background: #ffffff;
       page-break-before: always;
     }
 
     .category-header {
       background: var(--navy);
       color: #ffffff;
-      padding: 18px 24px;
+      padding: 14px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -181,27 +182,27 @@ ${{ "{:,.0f}".format(value) | replace(",", ".") }}
     .category-header-left {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
     }
 
     .category-accent-bar {
-      width: 5px;
-      height: 36px;
+      width: 4px;
+      height: 28px;
       background: var(--accent);
-      border-radius: 3px;
+      border-radius: 2px;
       flex-shrink: 0;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
 
     .category-name {
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
     .category-count {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       color: rgba(255,255,255,0.5);
       letter-spacing: 0.06em;
       margin-top: 2px;
@@ -211,8 +212,8 @@ ${{ "{:,.0f}".format(value) | replace(",", ".") }}
       background: rgba(255,255,255,0.1);
       border: 1px solid rgba(255,255,255,0.2);
       border-radius: 20px;
-      padding: 4px 14px;
-      font-size: 0.75rem;
+      padding: 3px 12px;
+      font-size: 0.7rem;
       font-weight: 600;
       color: rgba(255,255,255,0.8);
       white-space: nowrap;
@@ -220,131 +221,135 @@ ${{ "{:,.0f}".format(value) | replace(",", ".") }}
       print-color-adjust: exact;
     }
 
-    /* ─── Product Grid ──────────────────────────────────────── */
-    .product-grid {
-      padding: 16px;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-    }
-
-    /* ─── Product Card ──────────────────────────────────────── */
-    .product-card {
-      background: var(--card-bg);
-      border: 1px solid var(--gray-border);
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 4px rgba(26,26,46,0.07);
-      display: flex;
-      flex-direction: column;
-    }
-    .product-card:hover {
-      box-shadow: 0 4px 18px rgba(26,26,46,0.14);
-      transform: translateY(-1px);
-      transition: all 0.15s ease;
-    }
-
-    /* Image */
-    .card-image-wrap {
+    /* ─── Product List Table ───────────────────────────────── */
+    .product-list {
       width: 100%;
-      aspect-ratio: 1 / 1;
-      background: #f8f8fb;
-      overflow: hidden;
-      border-bottom: 1px solid var(--gray-border);
-      position: relative;
+      border-collapse: collapse;
     }
-    .card-image-wrap img {
+
+    .product-list thead th {
+      background: var(--gray-light);
+      padding: 8px 12px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--gray-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      text-align: left;
+      border-bottom: 2px solid var(--gray-border);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .product-list thead th.col-price {
+      text-align: right;
+      width: 120px;
+    }
+
+    .product-list thead th.col-img {
+      width: 56px;
+      text-align: center;
+    }
+
+    .product-list thead th.col-code {
+      width: 100px;
+    }
+
+    .product-list tbody tr {
+      border-bottom: 1px solid var(--gray-border);
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .product-list tbody tr:hover {
+      background: var(--gray-light);
+    }
+
+    .product-list td {
+      padding: 6px 12px;
+      vertical-align: middle;
+    }
+
+    .product-list td.col-img {
+      width: 56px;
+      padding: 4px 8px;
+      text-align: center;
+    }
+
+    .list-img-wrap {
+      width: 48px;
+      height: 48px;
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--gray-light);
+      border: 1px solid var(--gray-border);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .list-img-wrap img {
       width: 100%;
       height: 100%;
       object-fit: contain;
       display: block;
-      padding: 8px;
-    }
-    .card-image-placeholder {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      color: #c8c8d8;
-    }
-    .card-image-placeholder svg {
-      width: 48px; height: 48px;
-      opacity: 0.4;
-    }
-    .card-image-placeholder span {
-      font-size: 0.62rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: #c0c0d0;
     }
 
-    /* Body */
-    .card-body {
-      padding: 10px 12px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      flex: 1;
+    .list-img-placeholder {
+      color: #d0d0dd;
+      font-size: 0.5rem;
+      text-align: center;
     }
-    .card-name {
-      font-size: 0.8rem;
+
+    .list-img-placeholder svg {
+      width: 24px;
+      height: 24px;
+      opacity: 0.35;
+    }
+
+    .list-product-name {
+      font-size: 0.85rem;
       font-weight: 600;
       color: var(--text-primary);
-      line-height: 1.35;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      min-height: 2.2em;
+      line-height: 1.3;
     }
-    .card-code {
-      font-size: 0.68rem;
+
+    .list-product-code {
+      font-size: 0.75rem;
       color: var(--gray-muted);
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       letter-spacing: 0.04em;
     }
-    .card-price {
-      margin-top: auto;
-      padding-top: 10px;
-    }
-    .card-price-label {
-      display: block;
-      font-size: 0.6rem;
-      font-weight: 400;
-      color: var(--gray-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 1px;
-    }
-    .card-price-value {
-      font-size: 1.05rem;
+
+    .list-product-price {
+      font-size: 0.95rem;
       font-weight: 700;
       color: var(--navy);
+      text-align: right;
+      white-space: nowrap;
     }
 
     /* ─── Print ─────────────────────────────────────────────── */
     @media print {
       @page {
         size: A4 portrait;
-        margin: 12mm 12mm 18mm 12mm;
+        margin: 10mm 10mm 16mm 10mm;
         @bottom-left {
           content: "{{ company_name }}";
-          font-size: 8pt;
+          font-size: 7pt;
           color: #8a8a9a;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
         @bottom-right {
           content: "Página " counter(page) " de " counter(pages);
-          font-size: 8pt;
+          font-size: 7pt;
           color: #8a8a9a;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
         @bottom-center {
           content: "{{ generated_date }}";
-          font-size: 8pt;
+          font-size: 7pt;
           color: #c0c0d0;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
@@ -352,7 +357,7 @@ ${{ "{:,.0f}".format(value) | replace(",", ".") }}
 
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-      html, body { background: #ffffff; font-size: 10pt; }
+      html, body { background: #ffffff; font-size: 9pt; }
 
       .cover-page {
         width: 100%; height: 100vh;
@@ -368,39 +373,28 @@ ${{ "{:,.0f}".format(value) | replace(",", ".") }}
 
       .category-header { page-break-after: avoid; }
 
-      .product-card {
-        box-shadow: none !important;
-        border: 1px solid #d8d8e4;
+      .product-list tbody tr {
         break-inside: avoid;
         page-break-inside: avoid;
       }
 
-      .product-grid {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        padding: 12px;
+      .list-img-wrap {
+        width: 40px;
+        height: 40px;
       }
 
-      .card-image-wrap {
-        max-height: 140px;
-        aspect-ratio: auto;
-      }
-      .card-image-wrap img {
-        padding: 4px;
-        max-height: 140px;
-        width: auto;
-        margin: 0 auto;
-      }
-      .card-name   { font-size: 7.5pt; }
-      .card-code   { font-size: 6.5pt; }
-      .card-price-value { font-size: 9pt; }
-      .category-name { font-size: 11pt; }
+      .list-product-name { font-size: 8pt; }
+      .list-product-code { font-size: 7pt; }
+      .list-product-price { font-size: 8.5pt; }
+      .category-name { font-size: 10pt; }
+
+      .product-list td { padding: 4px 8px; }
+      .product-list thead th { padding: 5px 8px; font-size: 6.5pt; }
     }
   </style>
 </head>
 <body>
 <script>
-// Precargar todas las imágenes antes de imprimir para evitar que se corten o no aparezcan
 window.addEventListener('beforeprint', function() {
   document.querySelectorAll('img[src]').forEach(function(img) {
     if (!img.complete) {
@@ -417,10 +411,8 @@ window.addEventListener('beforeprint', function() {
     <div class="cover-logo-ring">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="52" height="52"
            fill="none" stroke="#e94560" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-        <!-- wrench -->
         <path d="M14 50l22-22"/>
         <path d="M36 28a10 10 0 1 0-10-10c0 2 .6 3.8 1.5 5.3L10 41a3 3 0 0 0 4.2 4.2L31.7 27.5A10 10 0 0 0 36 28z"/>
-        <!-- gear hint -->
         <circle cx="46" cy="44" r="8"/>
         <path d="M46 38v-3M46 53v-3M40 44h-3M55 44h-3"/>
         <circle cx="46" cy="44" r="3"/>
@@ -468,49 +460,52 @@ window.addEventListener('beforeprint', function() {
     <div class="category-badge">{% if show_prices %}Lista Mayorista{% else %}Catálogo{% endif %}</div>
   </div>
 
-  <div class="product-grid">
-    {%- for product in category.products %}
-    <div class="product-card">
-
-      <div class="card-image-wrap">
-        {%- if product.has_image and product.image_url %}
-        <img
-          src="{{ product.image_url }}"
-          alt="{{ product.name | e }}"
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-        />
-        <div class="card-image-placeholder" style="display:none">
-          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M32 6L6 20v24l26 14 26-14V20L32 6z"/>
-            <path d="M32 6v38M6 20l26 14 26-14"/>
-          </svg>
-          <span>Sin imagen</span>
-        </div>
-        {%- else %}
-        <div class="card-image-placeholder">
-          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M32 6L6 20v24l26 14 26-14V20L32 6z"/>
-            <path d="M32 6v38M6 20l26 14 26-14"/>
-          </svg>
-          <span>Sin imagen</span>
-        </div>
+  <table class="product-list">
+    <thead>
+      <tr>
+        <th class="col-img">Img</th>
+        <th>Producto</th>
+        <th class="col-code">Código</th>
+        {%- if show_prices %}
+        <th class="col-price">Precio</th>
         {%- endif %}
-      </div>
-
-      <div class="card-body">
-        <div class="card-name">{{ product.name }}</div>
-        <div class="card-code">Cód: {{ product.code }}</div>
+      </tr>
+    </thead>
+    <tbody>
+      {%- for product in category.products %}
+      <tr>
+        <td class="col-img">
+          <div class="list-img-wrap">
+            {%- if product.has_image and product.image_url %}
+            <img
+              src="{{ product.image_url }}"
+              alt="{{ product.name | e }}"
+              onerror="this.parentElement.innerHTML='<div class=list-img-placeholder><svg viewBox=&quot;0 0 64 64&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;><path d=&quot;M32 6L6 20v24l26 14 26-14V20L32 6z&quot;/></svg></div>'"
+            />
+            {%- else %}
+            <div class="list-img-placeholder">
+              <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M32 6L6 20v24l26 14 26-14V20L32 6z"/>
+              </svg>
+            </div>
+            {%- endif %}
+          </div>
+        </td>
+        <td>
+          <div class="list-product-name">{{ product.name }}</div>
+        </td>
+        <td>
+          <div class="list-product-code">{{ product.code }}</div>
+        </td>
         {%- if product.show_price %}
-        <div class="card-price">
-          <span class="card-price-label">Precio mayorista</span>
-          <span class="card-price-value">{{ format_price(product.salePrice) }}</span>
-        </div>
+        <td>
+          <div class="list-product-price">{{ format_price(product.salePrice) }}</div>
+        </td>
         {%- endif %}
-      </div>
-
-    </div>
-    {%- endfor %}
-  </div>
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
 
 </div>
 {%- endfor %}
