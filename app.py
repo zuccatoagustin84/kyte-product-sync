@@ -374,13 +374,35 @@ if page == "Catalogo de Productos":
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         fmt_suffix = "lista" if catalog_format == "Lista con imágenes" else "catalogo"
         price_suffix = "" if show_prices else "_sin_precio"
-        st.download_button(
-            label="Descargar catálogo HTML",
-            data=html_out.encode("utf-8"),
-            file_name=f"{fmt_suffix}{price_suffix}_{ts}.html",
-            mime="text/html",
-        )
-        st.info("Para imprimir o guardar como PDF: abrí el archivo en Chrome → Ctrl+P → Guardar como PDF")
+        base_name = f"{fmt_suffix}{price_suffix}_{ts}"
+
+        # Generar PDF
+        pdf_bytes = None
+        try:
+            from weasyprint import HTML as WeasyHTML
+            with st.spinner("Generando PDF..."):
+                pdf_bytes = WeasyHTML(string=html_out).write_pdf()
+        except Exception as e:
+            st.warning(f"No se pudo generar el PDF: {e}")
+
+        dl_col1, dl_col2 = st.columns(2)
+        with dl_col1:
+            st.download_button(
+                label="Descargar HTML",
+                data=html_out.encode("utf-8"),
+                file_name=f"{base_name}.html",
+                mime="text/html",
+            )
+        with dl_col2:
+            if pdf_bytes:
+                st.download_button(
+                    label="Descargar PDF",
+                    data=pdf_bytes,
+                    file_name=f"{base_name}.pdf",
+                    mime="application/pdf",
+                )
+            else:
+                st.info("PDF no disponible — descargá el HTML y usá Chrome → Ctrl+P")
 
     st.stop()
 
