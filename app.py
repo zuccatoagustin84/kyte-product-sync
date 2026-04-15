@@ -427,16 +427,43 @@ if page == "Catalogo de Productos":
             with st.spinner("Descargando productos de Kyte..."):
                 try:
                     prods = client.get_products()
-                    # Extraer categorías únicas
                     cats = sorted(set(
                         (p.get("category") or {}).get("name", "").strip() or "Sin categoría"
                         for p in prods
                     ))
                     st.session_state.catalog_prods = prods
                     st.session_state.catalog_cats = cats
+                    st.rerun()  # mostrar Paso 2 inmediatamente, sin pedir otro click
                 except KyteAPIError as e:
                     st.error(f"Error de API: {e}")
         st.stop()
+
+    # ── Exportar productos a Excel para enviar a clientes ────
+    with st.expander("📥 Exportar productos a Excel (lista para clientes)"):
+        kyte_prods = st.session_state.catalog_prods
+        rows = []
+        for p in kyte_prods:
+            cat = p.get("category") or {}
+            rows.append({
+                "Codigo": p.get("code", ""),
+                "Nombre": p.get("name", ""),
+                "Precio": p.get("salePrice", 0),
+                "Categoria": cat.get("name", "") if isinstance(cat, dict) else "",
+            })
+        df_export = pd.DataFrame(rows).sort_values(["Categoria", "Nombre"])
+        st.caption(f"{len(df_export)} productos · ordenado por categoría y nombre")
+        st.dataframe(df_export.head(20), use_container_width=True, hide_index=True)
+
+        out = io.BytesIO()
+        with pd.ExcelWriter(out, engine="openpyxl") as w:
+            df_export.to_excel(w, sheet_name="Productos", index=False)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            "⬇ Descargar Excel",
+            data=out.getvalue(),
+            file_name=f"productos_mptools_{ts}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     # ── Paso 2: Selección y orden de categorías ───────────────
     try:
