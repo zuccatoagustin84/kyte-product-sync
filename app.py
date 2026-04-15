@@ -542,8 +542,31 @@ col2.metric("Sin cambio", n_ok)
 col3.metric("Sin match", n_nomatch)
 col4.metric("Precio 0 (ignorados)", n_zero)
 
+# Productos en Kyte que NO están en el Excel
+matched_codes = set(
+    report_df.loc[report_df["Estado"].isin(["ACTUALIZAR", "OK", "PRECIO 0"]), "Codigo"]
+    .astype(str).str.lower()
+)
+kyte_only_rows = []
+for p in kyte_products:
+    code = normalize(p.get("code", ""))
+    if not code or code in matched_codes:
+        continue
+    cat = p.get("category") or {}
+    kyte_only_rows.append({
+        "Codigo": code,
+        "Nombre": p.get("name", ""),
+        "Precio Kyte": p.get("salePrice", 0),
+        "Categoria": cat.get("name", "") if isinstance(cat, dict) else "",
+    })
+kyte_only_df = pd.DataFrame(kyte_only_rows)
+
+n_kyte_only = len(kyte_only_df)
+
 # Tabs
-tab_update, tab_nomatch, tab_all = st.tabs(["A Actualizar", "Sin Match", "Todo"])
+tab_update, tab_nomatch, tab_kyte_only, tab_all = st.tabs(
+    ["A Actualizar", f"En Excel, no en Kyte ({n_nomatch})", f"En Kyte, no en Excel ({n_kyte_only})", "Todo"]
+)
 
 with tab_update:
     df_upd = report_df[report_df["Estado"] == "ACTUALIZAR"].reset_index(drop=True)
@@ -591,11 +614,44 @@ with tab_update:
         st.info("No hay precios para actualizar. Todo esta al dia.")
 
 with tab_nomatch:
-    df_nm = report_df[report_df["Estado"].isin(["SIN MATCH", "SIN CODIGO", "PRECIO 0"])]
+    st.caption("Productos del Excel que no están en Kyte (o sin código).")
+    df_nm = report_df[report_df["Estado"].isin(["SIN MATCH", "SIN CODIGO", "PRECIO 0"])].reset_index(drop=True)
     if len(df_nm):
+        f_nm = st.text_input(
+            "Filtrar por código o nombre",
+            key="filtro_nomatch",
+            placeholder="ej: MRC050590 ó amoladora",
+        ).strip().lower()
+        if f_nm:
+            mask = (
+                df_nm["Codigo"].astype(str).str.lower().str.contains(f_nm, na=False)
+                | df_nm["Nombre"].astype(str).str.lower().str.contains(f_nm, na=False)
+            )
+            df_nm = df_nm[mask].reset_index(drop=True)
         st.dataframe(df_nm, use_container_width=True, hide_index=True)
+        st.caption(f"{len(df_nm)} filas")
     else:
         st.success("Todos los productos de la lista matchearon con Kyte.")
+
+with tab_kyte_only:
+    st.caption("Productos cargados en Kyte que no aparecen en el Excel del distribuidor.")
+    if len(kyte_only_df):
+        f_ko = st.text_input(
+            "Filtrar por código o nombre",
+            key="filtro_kyte_only",
+            placeholder="ej: MRC050590 ó amoladora",
+        ).strip().lower()
+        df_ko = kyte_only_df.copy()
+        if f_ko:
+            mask = (
+                df_ko["Codigo"].astype(str).str.lower().str.contains(f_ko, na=False)
+                | df_ko["Nombre"].astype(str).str.lower().str.contains(f_ko, na=False)
+            )
+            df_ko = df_ko[mask].reset_index(drop=True)
+        st.dataframe(df_ko, use_container_width=True, hide_index=True)
+        st.caption(f"{len(df_ko)} filas")
+    else:
+        st.success("Todos los productos de Kyte tienen match en el Excel.")
 
 with tab_all:
     st.dataframe(report_df, use_container_width=True, hide_index=True)
