@@ -571,11 +571,33 @@ tab_update, tab_nomatch, tab_kyte_only, tab_all = st.tabs(
 with tab_update:
     df_upd = report_df[report_df["Estado"] == "ACTUALIZAR"].reset_index(drop=True)
     if len(df_upd):
-        filtro = st.text_input(
-            "Filtrar por código o nombre",
-            key="filtro_update",
-            placeholder="ej: MRC050590 ó amoladora",
-        ).strip().lower()
+        # Columna visual con flecha de tendencia
+        def _trend(d):
+            try:
+                v = float(d)
+                if v > 0:
+                    return "🔼 SUBE"
+                if v < 0:
+                    return "🔽 BAJA"
+            except (ValueError, TypeError):
+                pass
+            return "➡️"
+        df_upd.insert(0, "Cambio", df_upd["Diferencia"].apply(_trend))
+
+        fc1, fc2 = st.columns([3, 2])
+        with fc1:
+            filtro = st.text_input(
+                "Filtrar por código o nombre",
+                key="filtro_update",
+                placeholder="ej: MRC050590 ó amoladora",
+            ).strip().lower()
+        with fc2:
+            tendencia = st.radio(
+                "Mostrar",
+                ["Todos", "Solo suben 🔼", "Solo bajan 🔽"],
+                horizontal=True,
+                key="filtro_tendencia",
+            )
 
         df_view = df_upd.copy()
         if filtro:
@@ -584,6 +606,10 @@ with tab_update:
                 | df_view["Nombre"].astype(str).str.lower().str.contains(filtro, na=False)
             )
             df_view = df_view[mask].reset_index(drop=True)
+        if tendencia == "Solo suben 🔼":
+            df_view = df_view[df_view["Cambio"].str.contains("SUBE")].reset_index(drop=True)
+        elif tendencia == "Solo bajan 🔽":
+            df_view = df_view[df_view["Cambio"].str.contains("BAJA")].reset_index(drop=True)
 
         df_view.insert(0, "Sync", True)
 
