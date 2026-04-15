@@ -117,8 +117,6 @@ if _col2.button("✕ Limpiar", help="Borra el token guardado", disabled=not toke
     st.session_state.pop("kyte_token_input", None)
     st.rerun()
 
-update_cost = st.sidebar.checkbox("Actualizar costo tambien", value=True)
-
 st.sidebar.divider()
 page = st.sidebar.radio("Modo", ["Sincronizar Precios", "Catalogo de Productos"])
 
@@ -278,10 +276,7 @@ def run_matching(kyte_products, source_df, code_col, price_col, name_col=None):
         })
 
         if price_changed:
-            entry = {"product": matched, "salePrice": new_price}
-            if update_cost:
-                entry["costPrice"] = new_price
-            updates.append(entry)
+            updates.append({"product": matched, "salePrice": new_price})
 
     return pd.DataFrame(rows), updates
 
