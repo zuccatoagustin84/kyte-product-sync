@@ -53,7 +53,11 @@ def parse_kyte_token(token: str) -> tuple[str, str]:
     payload_b64 = parts[2]
     payload_b64 += "=" * (4 - len(payload_b64) % 4)
     payload = json.loads(base64.b64decode(payload_b64))
-    uid = payload["uid"]
+    # Kyte's original token uses "uid"; Firebase-refreshed id_tokens use
+    # "user_id" / "sub". Accept any of them.
+    uid = payload.get("uid") or payload.get("user_id") or payload.get("sub")
+    if not uid:
+        raise ValueError(f"Token sin uid (claims disponibles: {list(payload.keys())})")
 
     exp = payload.get("exp")
     if exp:
