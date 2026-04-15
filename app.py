@@ -75,6 +75,11 @@ st.sidebar.header("Configuracion")
 # st_javascript retorna None en el primer render y el valor real en el siguiente.
 # Solo seteamos la session_state del widget cuando tenemos un valor real,
 # así no bloqueamos la lectura con un "" prematuro.
+# Limpiar el state del widget si una acción previa lo pidió (debe correr ANTES
+# de instanciar el widget, sino Streamlit tira "cannot be modified after instantiated")
+if st.session_state.pop("_reset_token_input", False):
+    st.session_state.pop("kyte_token_input", None)
+
 if HAS_JS:
     if st.session_state.pop("_clear_saved_token", False):
         # Solo leer el token original de Kyte web (ignorar el guardado por nuestra app)
@@ -109,12 +114,13 @@ if HAS_JS and token:
 _col1, _col2 = st.sidebar.columns(2)
 if _col1.button("↺ Leer de Kyte", help="Lee el kyte_token fresco de Kyte web (requiere tenerlo abierto en este browser)", disabled=not HAS_JS):
     st.session_state["_clear_saved_token"] = True
-    st.session_state.pop("kyte_token_input", None)
+    st.session_state["_reset_token_input"] = True
     st.rerun()
 if _col2.button("✕ Limpiar", help="Borra el token guardado", disabled=not token):
     if HAS_JS:
         st_javascript("localStorage.removeItem('kyte_sync_token')")
-    st.session_state.pop("kyte_token_input", None)
+        st_javascript("localStorage.removeItem('kyte_token')")
+    st.session_state["_reset_token_input"] = True
     st.rerun()
 
 # ── Refresh token: configuración siempre disponible ──────────
@@ -178,10 +184,10 @@ if st.sidebar.button("🔄 Renovar token ahora", disabled=not _has_rt, help="Fue
             st.sidebar.error("No se puede renovar sin un token actual válido (necesito el aid).")
         else:
             new_token = refresh_kyte_token(st.session_state.kyte_refresh_token, _aid)
-            st.session_state.kyte_token_input = new_token
             if HAS_JS:
                 st_javascript(f"localStorage.setItem('kyte_sync_token', {_json.dumps(new_token)})")
-            st.sidebar.success("Token renovado ✓")
+                st_javascript(f"localStorage.setItem('kyte_token', {_json.dumps(new_token)})")
+            st.session_state["_reset_token_input"] = True
             st.rerun()
     except Exception as e:
         st.sidebar.error(f"Error renovando: {e}")
@@ -206,17 +212,16 @@ try:
     days = _token_days_left(token)
 
     # ── Auto-refresh si el token está por vencer ─────────────
-    if days is not None and days < 30 and st.session_state.get("kyte_refresh_token"):
+    # Solo si days >= 1 evitamos el loop con id_tokens de Firebase (que duran 1h → days=0)
+    if days is not None and 0 < days < 30 and st.session_state.get("kyte_refresh_token") and not st.session_state.get("_just_refreshed"):
         try:
             new_token = refresh_kyte_token(st.session_state.kyte_refresh_token, aid)
-            # Guardar el nuevo token
-            st.session_state.kyte_token_input = new_token
             if HAS_JS:
                 st_javascript(f"localStorage.setItem('kyte_sync_token', {_json.dumps(new_token)})")
-            token = new_token
-            uid, aid = parse_kyte_token(token)
-            days = _token_days_left(token)
-            st.sidebar.success(f"Token renovado · {days}d restantes")
+                st_javascript(f"localStorage.setItem('kyte_token', {_json.dumps(new_token)})")
+            st.session_state["_reset_token_input"] = True
+            st.session_state["_just_refreshed"] = True
+            st.rerun()
         except Exception as e:
             st.sidebar.error(f"⚠️ Token vence en {days} días · Error renovando: {e}")
     elif days is not None and days < 30:
@@ -226,6 +231,7 @@ try:
     else:
         label = f"Conectado · {days}d restantes" if days else f"Conectado ({aid[:8]}…)"
         st.sidebar.success(label)
+    st.session_state.pop("_just_refreshed", None)
 except Exception as e:
     st.sidebar.error(f"Token invalido: {e}")
     st.stop()
