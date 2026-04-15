@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 API_BASE = "https://kyte-api-gateway.azure-api.net/api/kyte-web"
 SUBSCRIPTION_KEY = "62dafa86be9543879a9b32d347c40ab9"
+FIREBASE_API_KEY = "AIzaSyCCxxnrPYhtA-RG-9BsdF9lMMLcEIMJOTk"
 
 
 def parse_kyte_token(token: str) -> tuple[str, str]:
@@ -61,6 +62,27 @@ def parse_kyte_token(token: str) -> tuple[str, str]:
         logger.info(f"  Token expires: {exp_date.isoformat()}")
 
     return uid, aid
+
+
+def refresh_kyte_token(refresh_token: str, aid: str) -> str:
+    """
+    Use a Firebase refresh token to obtain a fresh kyte_token.
+
+    The refresh token never expires (unless revoked) and can be used
+    indefinitely to get new short-lived ID tokens.
+
+    Returns:
+        New kyte_token string (base64, ready to use).
+    """
+    resp = requests.post(
+        f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}",
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+    )
+    if resp.status_code != 200:
+        raise KyteAPIError(f"Firebase refresh failed ({resp.status_code}): {resp.text}")
+    new_id_token = resp.json()["id_token"]
+    raw = f"kyte_{aid}.{new_id_token}"
+    return base64.b64encode(raw.encode()).decode().rstrip("=")
 
 
 @dataclass

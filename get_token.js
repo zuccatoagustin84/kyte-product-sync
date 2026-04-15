@@ -6,7 +6,7 @@
  *
  * Muestra el token, uid, aid y el comando listo para copiar y pegar.
  */
-(function() {
+(async function() {
   const token = localStorage.getItem('kyte_token');
   if (!token) {
     console.error('ERROR: No kyte_token encontrado. Asegurate de estar logueado en https://web.kyteapp.com');
@@ -26,12 +26,40 @@
     exp = new Date(payload.exp * 1000).toLocaleDateString();
   } catch(e) {}
 
+  // Extraer refresh token de IndexedDB (Firebase)
+  let refreshToken = null;
+  try {
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open('firebaseLocalStorageDb');
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = reject;
+    });
+    const tx = db.transaction('firebaseLocalStorage', 'readonly');
+    const store = tx.objectStore('firebaseLocalStorage');
+    const items = await new Promise(resolve => {
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result);
+    });
+    for (const item of items) {
+      if (item.value?.stsTokenManager?.refreshToken) {
+        refreshToken = item.value.stsTokenManager.refreshToken;
+        break;
+      }
+    }
+  } catch(e) {
+    console.warn('No se pudo leer IndexedDB para refresh token:', e);
+  }
+
   // Output
   console.log('\n=== KYTE TOKEN ===');
   console.log('Token:', token);
   console.log('UID:', uid);
   console.log('AID:', aid);
   console.log('Expira:', exp);
+  if (refreshToken) {
+    console.log('\n=== REFRESH TOKEN (para renovación automática) ===');
+    console.log('Refresh Token:', refreshToken);
+  }
   console.log('\n=== COMANDO LISTO ===');
   console.log(`python sync_prices_api.py --source "LISTA DISTRIBUCION.xlsx" --token "${token}" --dry-run`);
   console.log('\n=== PARA GUARDAR EN ARCHIVO ===');
