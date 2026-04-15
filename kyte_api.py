@@ -83,7 +83,7 @@ def refresh_kyte_token(refresh_token: str, aid: str) -> str:
         data={"grant_type": "refresh_token", "refresh_token": refresh_token},
     )
     if resp.status_code != 200:
-        raise KyteAPIError(f"Firebase refresh failed ({resp.status_code}): {resp.text}")
+        raise KyteAPIError(resp.status_code, f"Firebase refresh failed: {resp.text}", "securetoken.googleapis.com")
     new_id_token = resp.json()["id_token"]
     raw = f"kyte_{aid}.{new_id_token}"
     return base64.b64encode(raw.encode()).decode().rstrip("=")
