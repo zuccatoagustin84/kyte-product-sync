@@ -551,9 +551,47 @@ col4.metric("Precio 0 (ignorados)", n_zero)
 tab_update, tab_nomatch, tab_all = st.tabs(["A Actualizar", "Sin Match", "Todo"])
 
 with tab_update:
-    df_upd = report_df[report_df["Estado"] == "ACTUALIZAR"]
+    df_upd = report_df[report_df["Estado"] == "ACTUALIZAR"].reset_index(drop=True)
     if len(df_upd):
-        st.dataframe(df_upd, use_container_width=True, hide_index=True)
+        filtro = st.text_input(
+            "Filtrar por código o nombre",
+            key="filtro_update",
+            placeholder="ej: MRC050590 ó amoladora",
+        ).strip().lower()
+
+        df_view = df_upd.copy()
+        if filtro:
+            mask = (
+                df_view["Codigo"].astype(str).str.lower().str.contains(filtro, na=False)
+                | df_view["Nombre"].astype(str).str.lower().str.contains(filtro, na=False)
+            )
+            df_view = df_view[mask].reset_index(drop=True)
+
+        df_view.insert(0, "Sync", True)
+
+        cs1, cs2, _ = st.columns([1, 1, 4])
+        if cs1.button("Seleccionar todos"):
+            st.session_state.pop("editor_update", None)
+            df_view["Sync"] = True
+        if cs2.button("Deseleccionar todos"):
+            st.session_state.pop("editor_update", None)
+            df_view["Sync"] = False
+
+        edited = st.data_editor(
+            df_view,
+            use_container_width=True,
+            hide_index=True,
+            disabled=[c for c in df_view.columns if c != "Sync"],
+            column_config={"Sync": st.column_config.CheckboxColumn("Sync", default=True)},
+            key="editor_update",
+        )
+
+        selected_codes = set(
+            edited.loc[edited["Sync"] == True, "Codigo"].astype(str).str.lower()
+        )
+        updates = [u for u in updates if normalize(u["product"].get("code", "")) in selected_codes]
+        n_update = len(updates)
+        st.caption(f"{n_update} productos seleccionados para actualizar (de {len(df_upd)} con cambio)")
     else:
         st.info("No hay precios para actualizar. Todo esta al dia.")
 
