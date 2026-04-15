@@ -576,12 +576,12 @@ with tab_update:
             try:
                 v = float(d)
                 if v > 0:
-                    return "🔼 SUBE"
+                    return "🔴 SUBE"
                 if v < 0:
-                    return "🔽 BAJA"
+                    return "🟢 BAJA"
             except (ValueError, TypeError):
                 pass
-            return "➡️"
+            return "⚪"
         df_upd.insert(0, "Cambio", df_upd["Diferencia"].apply(_trend))
 
         fc1, fc2 = st.columns([3, 2])
@@ -594,7 +594,7 @@ with tab_update:
         with fc2:
             tendencia = st.radio(
                 "Mostrar",
-                ["Todos", "Solo suben 🔼", "Solo bajan 🔽"],
+                ["Todos", "Solo suben 🔴", "Solo bajan 🟢"],
                 horizontal=True,
                 key="filtro_tendencia",
             )
@@ -606,9 +606,9 @@ with tab_update:
                 | df_view["Nombre"].astype(str).str.lower().str.contains(filtro, na=False)
             )
             df_view = df_view[mask].reset_index(drop=True)
-        if tendencia == "Solo suben 🔼":
+        if tendencia == "Solo suben 🔴":
             df_view = df_view[df_view["Cambio"].str.contains("SUBE")].reset_index(drop=True)
-        elif tendencia == "Solo bajan 🔽":
+        elif tendencia == "Solo bajan 🟢":
             df_view = df_view[df_view["Cambio"].str.contains("BAJA")].reset_index(drop=True)
 
         df_view.insert(0, "Sync", True)
