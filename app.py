@@ -117,6 +117,75 @@ if _col2.button("✕ Limpiar", help="Borra el token guardado", disabled=not toke
     st.session_state.pop("kyte_token_input", None)
     st.rerun()
 
+# ── Refresh token: configuración siempre disponible ──────────
+_REFRESH_SNIPPET = '''(async () => {
+  try {
+    const db = await new Promise((res, rej) => {
+      const q = indexedDB.open("firebaseLocalStorageDb");
+      q.onsuccess = e => res(e.target.result);
+      q.onerror = e => rej(new Error("IndexedDB error: " + e.target.error));
+    });
+    const items = await new Promise((res, rej) => {
+      const q = db.transaction("firebaseLocalStorage", "readonly")
+                  .objectStore("firebaseLocalStorage").getAll();
+      q.onsuccess = () => res(q.result);
+      q.onerror = e => rej(e.target.error);
+    });
+    for (const i of items) {
+      const rt = i?.value?.stsTokenManager?.refreshToken;
+      if (rt) {
+        await navigator.clipboard.writeText(rt);
+        console.log("✅ Refresh token copiado!", rt.slice(0, 30) + "...");
+        return;
+      }
+    }
+    console.error("❌ No se encontró refreshToken en", items.length, "items");
+  } catch (e) { console.error("❌", e.message); }
+})();'''
+
+_has_rt = bool(st.session_state.get("kyte_refresh_token"))
+with st.sidebar.expander(
+    ("✅ Refresh token configurado" if _has_rt else "🔧 Configurar renovación automática"),
+    expanded=not _has_rt,
+):
+    st.markdown(
+        "Pegá tu **refresh token** de Firebase (una sola vez). Nunca expira.\n\n"
+        "Para obtenerlo, abrí [web.kyteapp.com](https://web.kyteapp.com), F12 > Console y pegá:"
+    )
+    st.code(_REFRESH_SNIPPET, language="javascript")
+    rt_input = st.text_input("Refresh Token", type="password", key="_rt_input")
+    cb1, cb2 = st.columns(2)
+    if cb1.button("💾 Guardar", disabled=not rt_input.strip()):
+        st.session_state.kyte_refresh_token = rt_input.strip()
+        if HAS_JS:
+            st_javascript(f"localStorage.setItem('kyte_refresh_token', {_json.dumps(rt_input.strip())})")
+        st.rerun()
+    if _has_rt and cb2.button("🗑 Borrar"):
+        st.session_state.pop("kyte_refresh_token", None)
+        if HAS_JS:
+            st_javascript("localStorage.removeItem('kyte_refresh_token')")
+        st.rerun()
+
+# ── Renovar ahora (manual) ──────────────────────────────────
+if st.sidebar.button("🔄 Renovar token ahora", disabled=not _has_rt, help="Fuerza un refresh usando el refresh token"):
+    try:
+        # aid se obtiene del token actual o de un parse defensivo
+        try:
+            _, _aid = parse_kyte_token(token) if token else (None, None)
+        except Exception:
+            _aid = None
+        if not _aid:
+            st.sidebar.error("No se puede renovar sin un token actual válido (necesito el aid).")
+        else:
+            new_token = refresh_kyte_token(st.session_state.kyte_refresh_token, _aid)
+            st.session_state.kyte_token_input = new_token
+            if HAS_JS:
+                st_javascript(f"localStorage.setItem('kyte_sync_token', {_json.dumps(new_token)})")
+            st.sidebar.success("Token renovado ✓")
+            st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"Error renovando: {e}")
+
 st.sidebar.divider()
 page = st.sidebar.radio("Modo", ["Sincronizar Precios", "Catalogo de Productos"])
 
@@ -151,23 +220,7 @@ try:
         except Exception as e:
             st.sidebar.error(f"⚠️ Token vence en {days} días · Error renovando: {e}")
     elif days is not None and days < 30:
-        st.sidebar.error(f"⚠️ Token vence en {days} días")
-        with st.sidebar.expander("Configurar renovación automática"):
-            st.markdown(
-                "Pegá tu **refresh token** de Firebase (una sola vez).\n\n"
-                "Para obtenerlo, abrí [web.kyteapp.com](https://web.kyteapp.com) "
-                "y pegá este script en la consola (F12 > Console):"
-            )
-            st.code(
-                '(async()=>{let d=await new Promise((r,j)=>{let q=indexedDB.open("firebaseLocalStorageDb");q.onsuccess=e=>r(e.target.result);q.onerror=j});let t=d.transaction("firebaseLocalStorage","readonly");let s=t.objectStore("firebaseLocalStorage");let a=await new Promise(r=>{let q=s.getAll();q.onsuccess=()=>r(q.result)});for(let i of a){if(i.value?.stsTokenManager?.refreshToken){let rt=i.value.stsTokenManager.refreshToken;copy(rt);console.log("Refresh token copiado al portapapeles!",rt.slice(0,20)+"...");return}}console.error("No se encontró refresh token")})()',
-                language="javascript",
-            )
-            rt_input = st.text_input("Refresh Token", type="password", key="_rt_input")
-            if st.button("Guardar refresh token") and rt_input.strip():
-                st.session_state.kyte_refresh_token = rt_input.strip()
-                if HAS_JS:
-                    st_javascript(f"localStorage.setItem('kyte_refresh_token', {_json.dumps(rt_input.strip())})")
-                st.rerun()
+        st.sidebar.error(f"⚠️ Token vence en {days} días — configurá el refresh token arriba.")
     elif days is not None and days < 90:
         st.sidebar.warning(f"Token vence en {days} días")
     else:
