@@ -9,8 +9,24 @@ from pathlib import Path
 
 import base64 as _b64
 import json as _json
+import subprocess as _sp
 
-from kyte_api import KyteClient, KyteConfig, KyteAPIError, parse_kyte_token
+
+@st.cache_data
+def _deploy_info() -> str:
+    """Devuelve 'abc1234 · 2026-04-15 14:30' del último commit, o '' si falla."""
+    try:
+        out = _sp.check_output(
+            ["git", "log", "-1", "--format=%h · %cd", "--date=format:%Y-%m-%d %H:%M"],
+            cwd=Path(__file__).parent,
+            stderr=_sp.DEVNULL,
+            text=True,
+        ).strip()
+        return out
+    except Exception:
+        return ""
+
+from kyte_api import KyteClient, KyteConfig, KyteAPIError, parse_kyte_token, refresh_kyte_token
 from generate_catalog import build_categories, build_image_url
 from jinja2 import Environment, FileSystemLoader
 
@@ -48,6 +64,10 @@ st.set_page_config(
 
 st.title("Kyte Price Sync")
 
+_dep = _deploy_info()
+if _dep:
+    st.sidebar.caption(f"Deploy: {_dep}")
+
 # ── Sidebar: Config ──────────────────────────────────────────
 st.sidebar.header("Configuracion")
 
@@ -66,6 +86,12 @@ if HAS_JS:
         )
     if isinstance(_saved, str) and _saved.strip() and not st.session_state.get("kyte_token_input", "").strip():
         st.session_state.kyte_token_input = _saved.strip()
+
+# ── Leer refresh token de localStorage ───────────────────────
+if HAS_JS and "kyte_refresh_token" not in st.session_state:
+    _rt = st_javascript("localStorage.getItem('kyte_refresh_token') || ''")
+    if isinstance(_rt, str) and _rt.strip():
+        st.session_state.kyte_refresh_token = _rt.strip()
 
 token = st.sidebar.text_area(
     "Kyte Token",
@@ -111,8 +137,39 @@ if not token:
 try:
     uid, aid = parse_kyte_token(token)
     days = _token_days_left(token)
-    if days is not None and days < 30:
-        st.sidebar.error(f"⚠️ Token vence en {days} días — renovalo")
+
+    # ── Auto-refresh si el token está por vencer ─────────────
+    if days is not None and days < 30 and st.session_state.get("kyte_refresh_token"):
+        try:
+            new_token = refresh_kyte_token(st.session_state.kyte_refresh_token, aid)
+            # Guardar el nuevo token
+            st.session_state.kyte_token_input = new_token
+            if HAS_JS:
+                st_javascript(f"localStorage.setItem('kyte_sync_token', {_json.dumps(new_token)})")
+            token = new_token
+            uid, aid = parse_kyte_token(token)
+            days = _token_days_left(token)
+            st.sidebar.success(f"Token renovado · {days}d restantes")
+        except Exception as e:
+            st.sidebar.error(f"⚠️ Token vence en {days} días · Error renovando: {e}")
+    elif days is not None and days < 30:
+        st.sidebar.error(f"⚠️ Token vence en {days} días")
+        with st.sidebar.expander("Configurar renovación automática"):
+            st.markdown(
+                "Pegá tu **refresh token** de Firebase (una sola vez).\n\n"
+                "Para obtenerlo, abrí [web.kyteapp.com](https://web.kyteapp.com) "
+                "y pegá este script en la consola (F12 > Console):"
+            )
+            st.code(
+                '(async()=>{let d=await new Promise((r,j)=>{let q=indexedDB.open("firebaseLocalStorageDb");q.onsuccess=e=>r(e.target.result);q.onerror=j});let t=d.transaction("firebaseLocalStorage","readonly");let s=t.objectStore("firebaseLocalStorage");let a=await new Promise(r=>{let q=s.getAll();q.onsuccess=()=>r(q.result)});for(let i of a){if(i.value?.stsTokenManager?.refreshToken){let rt=i.value.stsTokenManager.refreshToken;copy(rt);console.log("Refresh token copiado al portapapeles!",rt.slice(0,20)+"...");return}}console.error("No se encontró refresh token")})()',
+                language="javascript",
+            )
+            rt_input = st.text_input("Refresh Token", type="password", key="_rt_input")
+            if st.button("Guardar refresh token") and rt_input.strip():
+                st.session_state.kyte_refresh_token = rt_input.strip()
+                if HAS_JS:
+                    st_javascript(f"localStorage.setItem('kyte_refresh_token', {_json.dumps(rt_input.strip())})")
+                st.rerun()
     elif days is not None and days < 90:
         st.sidebar.warning(f"Token vence en {days} días")
     else:
@@ -135,39 +192,32 @@ def normalize(text) -> str:
 
 def load_source(file) -> pd.DataFrame:
     raw = pd.read_excel(file, header=None)
-    header_row = None
+    header_row = 0
     for i in range(min(30, len(raw))):
         row_vals = [str(v).strip().lower() for v in raw.iloc[i] if pd.notna(v)]
-        if any("articulo" in v for v in row_vals) and any("precio" in v for v in row_vals):
+        if not row_vals:
+            continue
+        has_code = any(("codigo" in v) or ("código" in v) or ("articulo" in v) or ("artículo" in v) for v in row_vals)
+        has_price = any("precio" in v for v in row_vals)
+        if has_code and has_price:
             header_row = i
             break
-    if header_row is None:
-        st.error("No se encontro header con 'Articulo' y 'Precio' en el Excel")
-        st.stop()
     file.seek(0)
     df = pd.read_excel(file, header=header_row)
     return df.dropna(how="all").reset_index(drop=True)
 
 
-def detect_columns(df):
-    cols = {}
+def guess_column(df, keywords):
+    """Devuelve el nombre de columna que matchea alguna keyword (case-insensitive)."""
     for c in df.columns:
-        lower = c.lower()
-        if "codigo" in lower or "digo" in lower:
-            cols["code"] = c
-        elif "articulo" in lower:
-            cols["name"] = c
-        elif "precio" in lower:
-            cols["price"] = c
-    return cols
+        lower = str(c).lower()
+        for kw in keywords:
+            if kw in lower:
+                return c
+    return None
 
 
-def run_matching(kyte_products, source_df):
-    src_cols = detect_columns(source_df)
-    if "name" not in src_cols or "price" not in src_cols:
-        st.error(f"Columnas requeridas no encontradas. Encontradas: {src_cols}")
-        st.stop()
-
+def run_matching(kyte_products, source_df, code_col, price_col, name_col=None):
     kyte_by_code = {}
     for product in kyte_products:
         code = normalize(product.get("code", ""))
@@ -178,7 +228,7 @@ def run_matching(kyte_products, source_df):
     updates = []
 
     for _, src_row in source_df.iterrows():
-        new_price = src_row[src_cols["price"]]
+        new_price = src_row[price_col]
         if pd.isna(new_price):
             continue
         try:
@@ -186,10 +236,13 @@ def run_matching(kyte_products, source_df):
         except (ValueError, TypeError):
             continue
 
-        src_name = str(src_row[src_cols["name"]]).strip() if pd.notna(src_row[src_cols["name"]]) else ""
+        src_name = ""
+        if name_col and name_col in source_df.columns and pd.notna(src_row[name_col]):
+            src_name = str(src_row[name_col]).strip()
+
         src_code = ""
-        if "code" in src_cols and pd.notna(src_row[src_cols["code"]]):
-            src_code = normalize(src_row[src_cols["code"]])
+        if pd.notna(src_row[code_col]):
+            src_code = normalize(src_row[code_col])
 
         if not src_code:
             rows.append({"Estado": "SIN CODIGO", "Nombre": src_name, "Codigo": "", "Precio Kyte": "", "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": ""})
@@ -436,6 +489,39 @@ with st.spinner("Leyendo Excel..."):
     source_df = load_source(uploaded)
 st.success(f"Lista cargada: {len(source_df)} productos")
 
+# ── Selectores de columnas ───────────────────────────────────
+st.markdown("**Indicá qué columnas usar para sincronizar:**")
+cols_list = [str(c) for c in source_df.columns]
+default_code = guess_column(source_df, ["codigo_catalogo", "codigo", "código", "code"])
+default_price = guess_column(source_df, ["precio_venta", "precio", "price"])
+default_name = guess_column(source_df, ["descripcion", "descripción", "articulo", "artículo", "nombre", "name"])
+
+c1, c2, c3 = st.columns(3)
+with c1:
+    code_col = st.selectbox(
+        "Columna de Código *",
+        options=cols_list,
+        index=cols_list.index(default_code) if default_code in cols_list else 0,
+    )
+with c2:
+    price_col = st.selectbox(
+        "Columna de Precio *",
+        options=cols_list,
+        index=cols_list.index(default_price) if default_price in cols_list else 0,
+    )
+with c3:
+    name_options = ["(ninguna)"] + cols_list
+    name_default_idx = name_options.index(default_name) if default_name in cols_list else 0
+    name_choice = st.selectbox("Columna de Descripción (opcional)", options=name_options, index=name_default_idx)
+    name_col = None if name_choice == "(ninguna)" else name_choice
+
+with st.expander("Vista previa del Excel"):
+    st.dataframe(source_df.head(10), use_container_width=True)
+
+if code_col == price_col:
+    st.error("La columna de código y la de precio deben ser distintas.")
+    st.stop()
+
 # Fetch Kyte products
 with st.spinner("Conectando con Kyte API..."):
     try:
@@ -447,7 +533,7 @@ st.success(f"Kyte: {len(kyte_products)} productos")
 
 # Run matching
 with st.spinner("Comparando precios..."):
-    report_df, updates = run_matching(kyte_products, source_df)
+    report_df, updates = run_matching(kyte_products, source_df, code_col, price_col, name_col)
 
 # Stats
 n_update = len(report_df[report_df["Estado"] == "ACTUALIZAR"])
