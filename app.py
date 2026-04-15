@@ -31,8 +31,8 @@ from generate_catalog import build_categories, build_image_url
 from jinja2 import Environment, FileSystemLoader
 
 
-def _token_days_left(token: str) -> int | None:
-    """Días restantes hasta el vencimiento del kyte_token. None si no se puede parsear."""
+def _token_seconds_left(token: str) -> int | None:
+    """Segundos restantes hasta el vencimiento del kyte_token. None si no se puede parsear."""
     try:
         t = token.strip()
         pad = 4 - len(t) % 4
@@ -45,10 +45,27 @@ def _token_days_left(token: str) -> int | None:
         pb = parts[2] + "=" * (4 - len(parts[2]) % 4)
         exp = _json.loads(_b64.b64decode(pb)).get("exp")
         if exp:
-            return (datetime.fromtimestamp(exp) - datetime.now()).days
+            return int((datetime.fromtimestamp(exp) - datetime.now()).total_seconds())
     except Exception:
         pass
     return None
+
+
+def _token_days_left(token: str) -> int | None:
+    s = _token_seconds_left(token)
+    return None if s is None else max(0, s // 86400)
+
+
+def _format_remaining(seconds: int) -> str:
+    if seconds <= 0:
+        return "vencido"
+    if seconds < 3600:
+        return f"{seconds // 60} min"
+    if seconds < 86400:
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        return f"{h}h {m}m" if m else f"{h}h"
+    return f"{seconds // 86400} días"
 try:
     from streamlit_javascript import st_javascript
     HAS_JS = True
@@ -209,11 +226,12 @@ if not token:
 # Parse token
 try:
     uid, aid = parse_kyte_token(token)
-    days = _token_days_left(token)
+    secs = _token_seconds_left(token)
+    has_rt = bool(st.session_state.get("kyte_refresh_token"))
 
-    # ── Auto-refresh si el token está por vencer ─────────────
-    # Solo si days >= 1 evitamos el loop con id_tokens de Firebase (que duran 1h → days=0)
-    if days is not None and 0 < days < 30 and st.session_state.get("kyte_refresh_token") and not st.session_state.get("_just_refreshed"):
+    # ── Auto-refresh si el token está realmente vencido o queda <5 min ───
+    # Disparamos solo si está vencido o casi, y no acabamos de hacerlo.
+    if secs is not None and secs < 300 and has_rt and not st.session_state.get("_just_refreshed"):
         try:
             new_token = refresh_kyte_token(st.session_state.kyte_refresh_token, aid)
             if HAS_JS:
@@ -223,14 +241,28 @@ try:
             st.session_state["_just_refreshed"] = True
             st.rerun()
         except Exception as e:
-            st.sidebar.error(f"⚠️ Token vence en {days} días · Error renovando: {e}")
-    elif days is not None and days < 30:
-        st.sidebar.error(f"⚠️ Token vence en {days} días — configurá el refresh token arriba.")
-    elif days is not None and days < 90:
-        st.sidebar.warning(f"Token vence en {days} días")
+            st.sidebar.error(f"⚠️ Error renovando token: {e}")
+    elif secs is not None and secs <= 0:
+        if has_rt:
+            st.sidebar.warning("Token vencido — apretá '🔄 Renovar token ahora'.")
+        else:
+            st.sidebar.error("Token vencido — configurá el refresh token arriba.")
+    elif secs is not None:
+        rem = _format_remaining(secs)
+        # Si dura < 1 día y hay refresh token, está OK (es un id_token corto)
+        if secs < 86400 and has_rt:
+            st.sidebar.success(f"Conectado · vence en {rem} (auto-renovable)")
+        elif secs < 86400 * 30:
+            if has_rt:
+                st.sidebar.info(f"Conectado · vence en {rem}")
+            else:
+                st.sidebar.warning(f"⚠️ Vence en {rem} — configurá el refresh token arriba.")
+        elif secs < 86400 * 90:
+            st.sidebar.warning(f"Vence en {rem}")
+        else:
+            st.sidebar.success(f"Conectado · vence en {rem}")
     else:
-        label = f"Conectado · {days}d restantes" if days else f"Conectado ({aid[:8]}…)"
-        st.sidebar.success(label)
+        st.sidebar.success(f"Conectado ({aid[:8]}…)")
     st.session_state.pop("_just_refreshed", None)
 except Exception as e:
     st.sidebar.error(f"Token invalido: {e}")
