@@ -635,18 +635,35 @@ if code_col == price_col:
     st.error("La columna de código y la de precio deben ser distintas.")
     st.stop()
 
-# Fetch Kyte products
+# Fetch Kyte products (cacheado 5 min por uid/aid: evita redescargar en cada click)
+@st.cache_data(ttl=300, show_spinner=False)
+def _fetch_kyte_products_cached(uid_: str, aid_: str, token_: str):
+    cfg = KyteConfig(uid=uid_, aid=aid_)
+    return KyteClient(cfg).get_products()
+
 with st.spinner("Conectando con Kyte API..."):
     try:
-        kyte_products = client.get_products()
+        kyte_products = _fetch_kyte_products_cached(uid, aid, token)
     except KyteAPIError as e:
         st.error(f"Error de API: {e}")
         st.stop()
-st.success(f"Kyte: {len(kyte_products)} productos")
 
-# Run matching
+_refresh_col, _status_col = st.columns([1, 5])
+if _refresh_col.button("↺ Refrescar Kyte"):
+    _fetch_kyte_products_cached.clear()
+    st.rerun()
+_status_col.success(f"Kyte: {len(kyte_products)} productos (cache 5 min)")
+
+# Matching también cacheado — solo recomputa si cambia el Excel o las columnas
+@st.cache_data(ttl=300, show_spinner=False)
+def _run_matching_cached(source_hash: str, kyte_n: int, code_col_: str, price_col_: str, name_col_: str | None,
+                          _source_df, _kyte_products):
+    return run_matching(_kyte_products, _source_df, code_col_, price_col_, name_col_)
+
 with st.spinner("Comparando precios..."):
-    report_df, updates = run_matching(kyte_products, source_df, code_col, price_col, name_col)
+    import hashlib
+    src_hash = hashlib.md5(pd.util.hash_pandas_object(source_df, index=False).values.tobytes()).hexdigest()
+    report_df, updates = _run_matching_cached(src_hash, len(kyte_products), code_col, price_col, name_col, source_df, kyte_products)
 
 # Stats
 n_update = len(report_df[report_df["Estado"] == "ACTUALIZAR"])
