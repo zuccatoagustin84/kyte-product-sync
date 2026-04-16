@@ -729,31 +729,50 @@ with tab_update:
         elif tendencia == "Solo bajan 🟢🔽":
             df_view = df_view[df_view["Cambio"].str.contains("BAJA")].reset_index(drop=True)
 
-        df_view.insert(0, "Sync", True)
+        # Set PERSISTENTE de códigos seleccionados (sobrevive filtros)
+        all_codes = set(df_upd["Codigo"].astype(str).str.lower())
+        sel_key = f"sel_{hash(frozenset(all_codes))}"
+        if st.session_state.get("_sel_key") != sel_key:
+            st.session_state._sel_key = sel_key
+            st.session_state._selected = set(all_codes)
 
-        cs1, cs2, _ = st.columns([1, 1, 4])
-        if cs1.button("Seleccionar todos"):
+        df_view.insert(0, "Sync", df_view["Codigo"].astype(str).str.lower().isin(st.session_state._selected))
+
+        cs1, cs2, cs3, _ = st.columns([1, 1, 1, 3])
+        if cs1.button("✓ Visibles"):
+            st.session_state._selected |= set(df_view["Codigo"].astype(str).str.lower())
             st.session_state.pop("editor_update", None)
-            df_view["Sync"] = True
-        if cs2.button("Deseleccionar todos"):
+            st.rerun()
+        if cs2.button("✗ Visibles"):
+            st.session_state._selected -= set(df_view["Codigo"].astype(str).str.lower())
             st.session_state.pop("editor_update", None)
-            df_view["Sync"] = False
+            st.rerun()
+        if cs3.button("↺ Reset"):
+            st.session_state._selected = set(all_codes)
+            st.session_state.pop("editor_update", None)
+            st.rerun()
 
         edited = st.data_editor(
             df_view,
             use_container_width=True,
             hide_index=True,
             disabled=[c for c in df_view.columns if c != "Sync"],
-            column_config={"Sync": st.column_config.CheckboxColumn("Sync", default=True)},
+            column_config={"Sync": st.column_config.CheckboxColumn("Sync")},
             key="editor_update",
         )
 
-        selected_codes = set(
-            edited.loc[edited["Sync"] == True, "Codigo"].astype(str).str.lower()
-        )
-        updates = [u for u in updates if normalize(u["product"].get("code", "")) in selected_codes]
+        # Sincronizar cambios del editor con el set persistente
+        for _, r in edited.iterrows():
+            code = str(r["Codigo"]).lower()
+            if r["Sync"]:
+                st.session_state._selected.add(code)
+            else:
+                st.session_state._selected.discard(code)
+
+        # Filtrar updates con el set PERSISTENTE (no con la vista filtrada)
+        updates = [u for u in updates if normalize(u["product"].get("code", "")) in st.session_state._selected]
         n_update = len(updates)
-        st.caption(f"{n_update} productos seleccionados para actualizar (de {len(df_upd)} con cambio)")
+        st.caption(f"{n_update} seleccionados · {len(df_upd)} con cambio · {len(df_view)} visibles")
     else:
         st.info("No hay precios para actualizar. Todo esta al dia.")
 
@@ -798,7 +817,20 @@ with tab_kyte_only:
         st.success("Todos los productos de Kyte tienen match en el Excel.")
 
 with tab_all:
-    st.dataframe(report_df, use_container_width=True, hide_index=True)
+    f_all = st.text_input(
+        "Filtrar por código o nombre",
+        key="filtro_all",
+        placeholder="ej: MRC050590 ó amoladora",
+    ).strip().lower()
+    df_all = report_df.copy()
+    if f_all:
+        mask = (
+            df_all["Codigo"].astype(str).str.lower().str.contains(f_all, na=False)
+            | df_all["Nombre"].astype(str).str.lower().str.contains(f_all, na=False)
+        )
+        df_all = df_all[mask].reset_index(drop=True)
+    st.dataframe(df_all, use_container_width=True, hide_index=True)
+    st.caption(f"{len(df_all)} filas")
 
 # Download report
 stats_data = {
