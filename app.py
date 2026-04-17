@@ -306,7 +306,7 @@ def guess_column(df, keywords):
     return None
 
 
-def run_matching(kyte_products, source_df, code_col, price_col, name_col=None):
+def run_matching(kyte_products, source_df, code_col, price_col, name_col=None, rubro_col=None):
     kyte_by_code = {}
     for product in kyte_products:
         code = normalize(product.get("code", ""))
@@ -329,17 +329,21 @@ def run_matching(kyte_products, source_df, code_col, price_col, name_col=None):
         if name_col and name_col in source_df.columns and pd.notna(src_row[name_col]):
             src_name = str(src_row[name_col]).strip()
 
+        src_rubro = ""
+        if rubro_col and rubro_col in source_df.columns and pd.notna(src_row[rubro_col]):
+            src_rubro = str(src_row[rubro_col]).strip()
+
         src_code = ""
         if pd.notna(src_row[code_col]):
             src_code = normalize(src_row[code_col])
 
         if not src_code:
-            rows.append({"Estado": "SIN CODIGO", "Nombre": src_name, "Codigo": "", "Precio Kyte": "", "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": ""})
+            rows.append({"Estado": "SIN CODIGO", "Nombre": src_name, "Codigo": "", "Precio Kyte": "", "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": "", "Rubro": src_rubro})
             continue
 
         matched = kyte_by_code.get(src_code)
         if not matched:
-            rows.append({"Estado": "SIN MATCH", "Nombre": src_name, "Codigo": src_code, "Precio Kyte": "", "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": ""})
+            rows.append({"Estado": "SIN MATCH", "Nombre": src_name, "Codigo": src_code, "Precio Kyte": "", "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": "", "Rubro": src_rubro})
             continue
 
         old_price = matched.get("salePrice", 0)
@@ -347,7 +351,7 @@ def run_matching(kyte_products, source_df, code_col, price_col, name_col=None):
         cat_name = cat.get("name", "") if isinstance(cat, dict) else ""
 
         if new_price <= 0:
-            rows.append({"Estado": "PRECIO 0", "Nombre": matched.get("name", ""), "Codigo": src_code, "Precio Kyte": old_price, "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": cat_name})
+            rows.append({"Estado": "PRECIO 0", "Nombre": matched.get("name", ""), "Codigo": src_code, "Precio Kyte": old_price, "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": cat_name, "Rubro": src_rubro})
             continue
 
         diff = round(new_price - old_price, 2)
@@ -364,6 +368,7 @@ def run_matching(kyte_products, source_df, code_col, price_col, name_col=None):
             "Diferencia": diff,
             "Dif %": f"{diff_pct:+.1f}%" if price_changed else "",
             "Categoria": cat_name,
+            "Rubro": src_rubro,
         })
 
         if price_changed:
@@ -687,13 +692,13 @@ _status_col.success(f"Kyte: {len(kyte_products)} productos (cache 5 min)")
 # Matching también cacheado — solo recomputa si cambia el Excel o las columnas
 @st.cache_data(ttl=300, show_spinner=False)
 def _run_matching_cached(source_hash: str, kyte_n: int, code_col_: str, price_col_: str, name_col_: str | None,
-                          _source_df, _kyte_products):
-    return run_matching(_kyte_products, _source_df, code_col_, price_col_, name_col_)
+                          rubro_col_: str | None, _source_df, _kyte_products):
+    return run_matching(_kyte_products, _source_df, code_col_, price_col_, name_col_, rubro_col_)
 
 with st.spinner("Comparando precios..."):
     import hashlib
     src_hash = hashlib.md5(pd.util.hash_pandas_object(source_df, index=False).values.tobytes()).hexdigest()
-    report_df, updates = _run_matching_cached(src_hash, len(kyte_products), code_col, price_col, name_col, source_df, kyte_products)
+    report_df, updates = _run_matching_cached(src_hash, len(kyte_products), code_col, price_col, name_col, rubro_col, source_df, kyte_products)
 
 # Stats
 n_update = len(report_df[report_df["Estado"] == "ACTUALIZAR"])
