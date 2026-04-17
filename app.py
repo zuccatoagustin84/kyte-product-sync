@@ -628,6 +628,36 @@ with c3:
     name_choice = st.selectbox("Columna de Descripción (opcional)", options=name_options, index=name_default_idx)
     name_col = None if name_choice == "(ninguna)" else name_choice
 
+# ── Filtro Rubro Z ───────────────────────────────────────────
+default_rubro = guess_column(source_df, ["rubro"])
+rubro_options = ["(ninguna)"] + cols_list
+rubro_default_idx = rubro_options.index(default_rubro) if default_rubro in cols_list else 0
+
+rc1, rc2 = st.columns([2, 3])
+with rc1:
+    ignore_rubro_z = st.checkbox(
+        "Ignorar productos con Rubro Z",
+        value=True,
+        help="Descarta las filas cuyo Rubro sea 'Z'",
+    )
+with rc2:
+    rubro_choice = st.selectbox(
+        "Columna de Rubro",
+        options=rubro_options,
+        index=rubro_default_idx,
+        disabled=not ignore_rubro_z,
+    )
+rubro_col = None if rubro_choice == "(ninguna)" else rubro_choice
+
+if ignore_rubro_z and rubro_col:
+    mask_z = source_df[rubro_col].astype(str).str.strip().str.lower() == "z"
+    n_ignored = int(mask_z.sum())
+    if n_ignored:
+        source_df = source_df[~mask_z].reset_index(drop=True)
+        st.info(f"🚫 {n_ignored} productos con Rubro Z ignorados")
+elif ignore_rubro_z and not rubro_col:
+    st.caption("No se detectó columna 'Rubro' — seleccioná una para filtrar.")
+
 with st.expander("Vista previa del Excel"):
     st.dataframe(source_df.head(10), use_container_width=True)
 
