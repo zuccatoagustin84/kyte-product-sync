@@ -45,20 +45,18 @@ export async function proxy(request: NextRequest) {
 
     const role = profile?.role as Role | undefined;
 
-    // /admin/usuarios/* — solo admin
-    if (path.startsWith("/admin/usuarios")) {
+    // Admin-only: usuarios, sync, finanzas, estadisticas
+    const adminOnly =
+      path.startsWith("/admin/usuarios") ||
+      path.startsWith("/admin/sync") ||
+      path.startsWith("/admin/finanzas") ||
+      path.startsWith("/admin/estadisticas");
+
+    if (adminOnly) {
       if (role !== "admin") {
         return NextResponse.redirect(new URL("/", request.url));
       }
-    }
-    // /admin/sync/* — solo admin
-    else if (path.startsWith("/admin/sync")) {
-      if (role !== "admin") {
-        return NextResponse.redirect(new URL("/", request.url));
-      }
-    }
-    // /admin/* (resto) — admin o operador
-    else {
+    } else {
       if (role !== "admin" && role !== "operador") {
         return NextResponse.redirect(new URL("/", request.url));
       }

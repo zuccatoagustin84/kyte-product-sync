@@ -37,63 +37,67 @@ function emptyPermissions(userId: string) {
   };
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const auth = await requireRole(request, ["admin"]);
   if (auth instanceof Response) return auth;
+  const { id } = await params;
 
   const supabase = createServiceClient();
 
-  // Fetch profiles
-  const { data: profiles, error } = await supabase
+  const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, full_name, company, phone, role")
-    .order("full_name");
+    .select("id, full_name, company, phone, role, is_active")
+    .eq("id", id)
+    .single();
 
   if (error) {
+    if (error.code === "PGRST116") {
+      return Response.json({ error: "Usuario no encontrado" }, { status: 404 });
+    }
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  // Fetch permissions for all profiles
-  const { data: perms } = await supabase.from("user_permissions").select("*");
-  const permsMap: Record<string, Record<string, unknown>> = {};
-  for (const p of perms ?? []) {
-    permsMap[p.user_id as string] = p as Record<string, unknown>;
-  }
+  const { data: perms } = await supabase
+    .from("user_permissions")
+    .select("*")
+    .eq("user_id", id)
+    .maybeSingle();
 
-  // Attempt to enrich with emails from auth.users via service role
-  const emailMap: Record<string, string> = {};
+  // Enrich with email
+  let email: string | null = null;
   try {
-    const { data: authUsers } = await supabase.auth.admin.listUsers({
-      perPage: 1000,
-    });
-    if (authUsers?.users) {
-      for (const u of authUsers.users) {
-        emailMap[u.id] = u.email ?? "";
-      }
-    }
+    const { data: authUser } = await supabase.auth.admin.getUserById(id);
+    email = authUser?.user?.email ?? null;
   } catch {
-    // If auth.admin is not available, we'll fall back to showing truncated IDs
+    // ignore
   }
 
-  const users = (profiles ?? []).map((p) => ({
-    id: p.id,
-    full_name: p.full_name ?? null,
-    company: p.company ?? null,
-    phone: p.phone ?? null,
-    role: (p.role as Role) ?? "user",
-    email: emailMap[p.id] ?? null,
-    permissions: permsMap[p.id] ?? emptyPermissions(p.id),
-  }));
-
-  return Response.json({ users });
+  return Response.json({
+    user: {
+      id: profile.id,
+      full_name: profile.full_name ?? null,
+      company: profile.company ?? null,
+      phone: profile.phone ?? null,
+      role: (profile.role as Role) ?? "user",
+      is_active: profile.is_active ?? true,
+      email,
+      permissions: perms ?? emptyPermissions(id),
+    },
+  });
 }
 
-export async function PATCH(request: NextRequest) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const auth = await requireRole(request, ["admin"]);
   if (auth instanceof Response) return auth;
+  const { id } = await params;
 
   let body: {
-    userId?: string;
     role?: string;
     permissions?: Partial<Record<PermissionField, unknown>>;
   };
@@ -103,11 +107,7 @@ export async function PATCH(request: NextRequest) {
     return Response.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const { userId, role, permissions } = body;
-
-  if (!userId || typeof userId !== "string") {
-    return Response.json({ error: "userId es requerido" }, { status: 400 });
-  }
+  const { role, permissions } = body;
 
   if (role !== undefined && !VALID_ROLES.includes(role as Role)) {
     return Response.json(
@@ -116,17 +116,15 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  // Prevent admin from changing their own role (lockout prevention)
-  if (userId === auth.userId && role !== undefined) {
+  // Self-lockout prevention
+  if (id === auth.userId && role !== undefined) {
     return Response.json(
       { error: "No podés cambiar tu propio rol" },
       { status: 400 }
     );
   }
-
-  // Prevent admin from removing their own admin permission
   if (
-    userId === auth.userId &&
+    id === auth.userId &&
     permissions &&
     "is_admin" in permissions &&
     permissions.is_admin === false
@@ -139,14 +137,13 @@ export async function PATCH(request: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Update role if provided
   let profile: Record<string, unknown> | null = null;
   if (role !== undefined) {
     const { data, error } = await supabase
       .from("profiles")
       .update({ role })
-      .eq("id", userId)
-      .select("id, full_name, company, phone, role")
+      .eq("id", id)
+      .select("id, full_name, company, phone, role, is_active")
       .single();
 
     if (error) {
@@ -158,11 +155,10 @@ export async function PATCH(request: NextRequest) {
     profile = data;
   }
 
-  // Upsert permissions if provided
   let permsData: Record<string, unknown> | null = null;
   if (permissions && typeof permissions === "object") {
     const upsertPayload: Record<string, unknown> = {
-      user_id: userId,
+      user_id: id,
       updated_at: new Date().toISOString(),
     };
     for (const f of PERMISSION_FIELDS) {
@@ -186,27 +182,22 @@ export async function PATCH(request: NextRequest) {
         }
       }
     }
-
-    // Keep is_admin synced with role when role is being updated
     if (role !== undefined && !("is_admin" in permissions)) {
       upsertPayload.is_admin = role === "admin";
     }
-
     const { data, error } = await supabase
       .from("user_permissions")
       .upsert(upsertPayload, { onConflict: "user_id" })
       .select()
       .single();
-
     if (error) return Response.json({ error: error.message }, { status: 500 });
     permsData = data;
   } else if (role !== undefined) {
-    // If only role changed, still sync is_admin flag
     const { data } = await supabase
       .from("user_permissions")
       .upsert(
         {
-          user_id: userId,
+          user_id: id,
           is_admin: role === "admin",
           updated_at: new Date().toISOString(),
         },
@@ -218,4 +209,11 @@ export async function PATCH(request: NextRequest) {
   }
 
   return Response.json({ user: profile, permissions: permsData });
+}
+
+export async function DELETE() {
+  return Response.json(
+    { error: "Eliminar usuarios no está permitido" },
+    { status: 405 }
+  );
 }

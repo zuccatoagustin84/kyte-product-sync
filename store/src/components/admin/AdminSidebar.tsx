@@ -3,7 +3,23 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { MenuIcon, XIcon, LogOutIcon } from "lucide-react";
+import {
+  MenuIcon,
+  XIcon,
+  LogOutIcon,
+  LayoutDashboardIcon,
+  CheckCircle2Icon,
+  ClipboardListIcon,
+  PackageIcon,
+  TagsIcon,
+  UsersIcon,
+  UserIcon,
+  DollarSignIcon,
+  WalletIcon,
+  BarChart3Icon,
+  RefreshCwIcon,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import type { Role } from "@/lib/rbac";
 import { hasPermission } from "@/lib/rbac";
@@ -11,17 +27,22 @@ import { hasPermission } from "@/lib/rbac";
 type NavItem = {
   href: string;
   label: string;
-  icon: string;
+  Icon: LucideIcon;
   permission: string;
 };
 
 const allNavItems: NavItem[] = [
-  { href: "/admin", label: "Dashboard", icon: "📊", permission: "products" },
-  { href: "/admin/productos", label: "Productos", icon: "📦", permission: "products" },
-  { href: "/admin/pedidos", label: "Pedidos", icon: "🛒", permission: "orders" },
-  { href: "/admin/categorias", label: "Categorías", icon: "🏷️", permission: "categories" },
-  { href: "/admin/usuarios", label: "Usuarios", icon: "👥", permission: "users" },
-  { href: "/admin/sync", label: "Actualizar precios", icon: "🔄", permission: "sync" },
+  { href: "/admin", label: "Dashboard", Icon: LayoutDashboardIcon, permission: "products" },
+  { href: "/admin/vender", label: "Vender", Icon: CheckCircle2Icon, permission: "pos" },
+  { href: "/admin/pedidos", label: "Pedidos", Icon: ClipboardListIcon, permission: "orders" },
+  { href: "/admin/productos", label: "Productos", Icon: PackageIcon, permission: "products" },
+  { href: "/admin/categorias", label: "Categorías", Icon: TagsIcon, permission: "categories" },
+  { href: "/admin/clientes", label: "Clientes", Icon: UserIcon, permission: "customers" },
+  { href: "/admin/transacciones", label: "Transacciones", Icon: DollarSignIcon, permission: "transactions" },
+  { href: "/admin/finanzas", label: "Finanzas", Icon: WalletIcon, permission: "finances" },
+  { href: "/admin/estadisticas", label: "Estadísticas", Icon: BarChart3Icon, permission: "analytics" },
+  { href: "/admin/usuarios", label: "Usuarios", Icon: UsersIcon, permission: "users" },
+  { href: "/admin/sync", label: "Actualizar precios", Icon: RefreshCwIcon, permission: "sync" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -94,7 +115,7 @@ export function AdminSidebar() {
                 : "text-white/70 hover:text-white hover:bg-white/10"
             }`}
           >
-            <span className="text-base">{item.icon}</span>
+            <item.Icon size={16} strokeWidth={2} />
             {item.label}
           </Link>
         ))}
