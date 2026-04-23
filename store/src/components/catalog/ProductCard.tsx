@@ -33,6 +33,8 @@ export function ProductCard({ product }: ProductCardProps) {
     product.cost_price > 0 &&
     product.sale_price < product.cost_price;
 
+  const tags = (product.tags ?? []).slice(0, 3);
+
   const handleAdd = () => {
     addItem(product);
     setAdded(true);
@@ -73,15 +75,26 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Sale badge */}
-        {isOnSale && (
-          <span
-            className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest text-white bg-[#ef4444] shadow-sm"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            Oferta
-          </span>
-        )}
+        {/* Badges (sale + tags) */}
+        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start pointer-events-none">
+          {isOnSale && (
+            <span
+              className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest text-white bg-[#ef4444] shadow-sm"
+              style={{ fontFamily: "var(--font-jakarta)" }}
+            >
+              Oferta
+            </span>
+          )}
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/95 text-[#111827] ring-1 ring-black/5 shadow-sm"
+              style={{ fontFamily: "var(--font-jakarta)" }}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
 
         {/* Cart count badge */}
         {inCart > 0 && (

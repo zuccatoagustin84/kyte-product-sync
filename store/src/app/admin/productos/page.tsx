@@ -15,6 +15,16 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { ImageManager } from "@/components/admin/ImageManager";
+import { TagInput } from "@/components/admin/TagInput";
+
+const DEFAULT_TAG_SUGGESTIONS = [
+  "Ofertas",
+  "Ingresos",
+  "ConDescuento",
+  "Destacado",
+  "Nuevo",
+  "Liquidación",
+];
 
 const PAGE_SIZE = 50;
 
@@ -28,6 +38,7 @@ type EditForm = {
   active: boolean;
   category_id: string;
   description: string;
+  tags: string[];
 };
 
 function emptyForm(p?: Product): EditForm {
@@ -41,6 +52,7 @@ function emptyForm(p?: Product): EditForm {
     active: p?.active ?? true,
     category_id: p?.category_id ?? "",
     description: p?.description ?? "",
+    tags: p?.tags ?? [],
   };
 }
 
@@ -149,6 +161,7 @@ export default function ProductosAdmin() {
           active: form.active,
           category_id: form.category_id || null,
           description: form.description || null,
+          tags: form.tags,
         }),
       });
       if (!res.ok) {
@@ -200,6 +213,7 @@ export default function ProductosAdmin() {
           active: createForm.active,
           category_id: createForm.category_id || null,
           description: createForm.description || null,
+          tags: createForm.tags,
         }),
       });
       if (!res.ok) {
@@ -341,6 +355,20 @@ export default function ProductosAdmin() {
             placeholder="Características, dimensiones, materiales..."
             className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm focus-visible:border-ring outline-none resize-y"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Tags
+          </label>
+          <TagInput
+            value={f.tags}
+            onChange={(tags) => setF({ ...f, tags })}
+            suggestions={DEFAULT_TAG_SUGGESTIONS}
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Etiquetas libres (se ven como badges en el catálogo). Enter o coma para agregar.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">

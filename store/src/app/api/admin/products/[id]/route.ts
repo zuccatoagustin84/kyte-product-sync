@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { normalizeTags } from "@/lib/tags";
 
 export async function PUT(
   request: NextRequest,
@@ -29,12 +30,17 @@ export async function PUT(
     "active",
     "category_id",
     "description",
+    "tags",
   ];
   const update: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in body) {
       update[key] = body[key];
     }
+  }
+
+  if ("tags" in update) {
+    update.tags = normalizeTags(update.tags);
   }
 
   if (Object.keys(update).length === 0) {

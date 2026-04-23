@@ -28,6 +28,7 @@ export interface Product {
   stock: number | null;
   min_order: number | null;
   slug: string | null;
+  tags: string[] | null;
   category?: Category;
   images?: ProductImage[];
 }

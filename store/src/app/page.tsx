@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { CategorySidebar } from "@/components/catalog/CategorySidebar";
 import { SearchBar } from "@/components/catalog/SearchBar";
 import { ProductGrid, type ViewMode } from "@/components/catalog/ProductGrid";
+import { TagFilter } from "@/components/catalog/TagFilter";
 import { CartSheet } from "@/components/cart/CartSheet";
 
 function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
@@ -41,6 +42,8 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   // Persistir preferencia de vista
   useEffect(() => {
@@ -63,6 +66,28 @@ export default function Home() {
       });
   }, []);
 
+  // Cargar tags únicos de todos los productos activos (independiente de filtros)
+  useEffect(() => {
+    supabase
+      .from("products")
+      .select("tags")
+      .eq("active", true)
+      .not("tags", "is", null)
+      .then(({ data }) => {
+        if (!data) return;
+        const counts = new Map<string, number>();
+        for (const row of data as { tags: string[] | null }[]) {
+          for (const tag of row.tags ?? []) {
+            counts.set(tag, (counts.get(tag) ?? 0) + 1);
+          }
+        }
+        const sorted = Array.from(counts.entries())
+          .sort((a, b) => b[1] - a[1])
+          .map(([tag]) => tag);
+        setAvailableTags(sorted);
+      });
+  }, []);
+
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     let query = supabase
@@ -73,6 +98,9 @@ export default function Home() {
     if (selectedCategory) {
       query = query.eq("category_id", selectedCategory);
     }
+    if (selectedTag) {
+      query = query.contains("tags", [selectedTag]);
+    }
     if (search.trim()) {
       query = query.or(`name.ilike.%${search.trim()}%,code.ilike.%${search.trim()}%`);
     }
@@ -80,7 +108,7 @@ export default function Home() {
     const { data } = await query.order("sort_order").limit(200);
     setProducts((data as Product[]) ?? []);
     setLoading(false);
-  }, [selectedCategory, search]);
+  }, [selectedCategory, selectedTag, search]);
 
   useEffect(() => {
     fetchProducts();
@@ -114,6 +142,11 @@ export default function Home() {
             <SearchBar value={search} onChange={setSearch} />
             <ViewToggle mode={viewMode} onChange={handleViewChange} />
           </div>
+          <TagFilter
+            tags={availableTags}
+            selected={selectedTag}
+            onSelect={setSelectedTag}
+          />
           <ProductGrid products={products} loading={loading} viewMode={viewMode} />
         </main>
       </div>
