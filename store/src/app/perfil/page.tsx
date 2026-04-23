@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getUser, createSupabaseServer } from "@/lib/supabase-server";
+import { createServiceClient } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SignOutButton from "./SignOutButton";
 import ProfileEditForm from "./ProfileEditForm";
+import type { Customer, CustomerLedgerEntry } from "@/lib/types";
 
 interface Order {
   id: string;
@@ -57,6 +59,18 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+function ledgerLabel(t: CustomerLedgerEntry["entry_type"]): string {
+  const map: Record<CustomerLedgerEntry["entry_type"], string> = {
+    sale: "Compra a crédito",
+    payment: "Pago registrado",
+    credit_add: "Crédito a favor",
+    credit_sub: "Crédito consumido",
+    refund: "Reembolso",
+    adjust: "Ajuste",
+  };
+  return map[t];
+}
+
 export default async function PerfilPage() {
   const user = await getUser();
 
@@ -80,6 +94,26 @@ export default async function PerfilPage() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
+
+  // Fetch customer linkeado + ledger (via service, bypass RLS)
+  const service = createServiceClient();
+  const { data: linkedCustomer } = await service
+    .from("customers")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .maybeSingle<Customer>();
+
+  let ledger: CustomerLedgerEntry[] = [];
+  if (linkedCustomer) {
+    const { data: entries } = await service
+      .from("customer_ledger")
+      .select("*")
+      .eq("customer_id", linkedCustomer.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    ledger = (entries ?? []) as CustomerLedgerEntry[];
+  }
 
   const displayName =
     profile?.full_name ?? user.email?.split("@")[0] ?? "Usuario";
@@ -141,6 +175,83 @@ export default async function PerfilPage() {
             initialPhone={profile?.phone ?? null}
           />
         </section>
+
+        {/* Mi cuenta (saldo + ledger) — sólo si hay customer linkeado */}
+        {linkedCustomer && (
+          <section className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-gray-900">Mi cuenta</h2>
+              {linkedCustomer.allow_pay_later && (
+                <Badge variant="secondary">Cuenta corriente</Badge>
+              )}
+            </div>
+
+            <div className="rounded-xl bg-gray-50 p-4 mb-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider">
+                Saldo actual
+              </p>
+              <p
+                className={`text-2xl font-bold mt-1 ${
+                  Number(linkedCustomer.balance) < 0
+                    ? "text-red-600"
+                    : Number(linkedCustomer.balance) > 0
+                    ? "text-green-700"
+                    : "text-gray-700"
+                }`}
+              >
+                {formatCurrency(Number(linkedCustomer.balance))}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {Number(linkedCustomer.balance) < 0
+                  ? "Debe"
+                  : Number(linkedCustomer.balance) > 0
+                  ? "A favor"
+                  : "Sin saldo"}
+                {linkedCustomer.credit_limit &&
+                  ` · Límite ${formatCurrency(Number(linkedCustomer.credit_limit))}`}
+              </p>
+            </div>
+
+            <h3 className="text-sm font-medium text-gray-700 mb-2">
+              Últimos movimientos
+            </h3>
+            {ledger.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin movimientos</p>
+            ) : (
+              <ul className="space-y-2">
+                {ledger.map((e) => (
+                  <li
+                    key={e.id}
+                    className="flex items-center justify-between text-sm border-b border-gray-100 pb-2 last:border-0"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {ledgerLabel(e.entry_type)}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {formatDate(e.created_at)}
+                        {e.payment_method && ` · ${e.payment_method}`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={`font-semibold ${
+                          e.amount > 0 ? "text-green-700" : "text-red-600"
+                        }`}
+                      >
+                        {e.amount > 0 ? "+" : "−"}
+                        {formatCurrency(Math.abs(Number(e.amount)))}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Saldo: {formatCurrency(Number(e.balance_after))}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
         {/* Order history */}
         <section className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 p-6">

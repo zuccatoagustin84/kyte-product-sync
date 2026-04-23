@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { getAppSettings } from "@/lib/app-settings";
 import type { OrderPayload } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
@@ -12,7 +13,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Cuerpo de la solicitud inválido" }, { status: 400 });
   }
 
-  // Validate required fields
   if (!body.customer_name?.trim()) {
     return Response.json(
       { error: "El nombre del cliente es requerido" },
@@ -27,17 +27,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Try to get the authenticated user (optional — guest checkout allowed)
   let userId: string | null = null;
   try {
     const serverSupabase = await createSupabaseServer();
     const { data: { user } } = await serverSupabase.auth.getUser();
     userId = user?.id ?? null;
   } catch {
-    // Not authenticated — proceed as guest
+    // sin sesión
+  }
+
+  const settings = await getAppSettings();
+  if (settings.require_login_for_orders && !userId) {
+    return Response.json(
+      { error: "Tenés que iniciar sesión para hacer un pedido", code: "LOGIN_REQUIRED" },
+      { status: 401 }
+    );
   }
 
   const supabase = createServiceClient();
+
+  // Si hay usuario logueado con customer linkeado, usamos esa ficha
+  let linkedCustomerId: string | null = null;
+  if (userId) {
+    const { data: linked } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("active", true)
+      .maybeSingle();
+    linkedCustomerId = linked?.id ?? null;
+  }
 
   // Insert order
   const { data: order, error: orderError } = await supabase
@@ -51,6 +70,7 @@ export async function POST(request: NextRequest) {
       total: body.total,
       status: "pending",
       ...(userId ? { user_id: userId } : {}),
+      ...(linkedCustomerId ? { customer_id: linkedCustomerId } : {}),
     })
     .select("id")
     .single();

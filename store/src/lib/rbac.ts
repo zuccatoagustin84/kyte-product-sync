@@ -14,6 +14,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     "transactions",
     "finances",
     "analytics",
+    "settings",
   ],
   operador: [
     "products",

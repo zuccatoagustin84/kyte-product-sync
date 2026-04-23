@@ -18,6 +18,7 @@ import {
   WalletIcon,
   BarChart3Icon,
   RefreshCwIcon,
+  SettingsIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
@@ -42,6 +43,7 @@ const allNavItems: NavItem[] = [
   { href: "/admin/finanzas", label: "Finanzas", Icon: WalletIcon, permission: "finances" },
   { href: "/admin/estadisticas", label: "Estadísticas", Icon: BarChart3Icon, permission: "analytics" },
   { href: "/admin/usuarios", label: "Usuarios", Icon: UsersIcon, permission: "users" },
+  { href: "/admin/configuracion", label: "Configuración", Icon: SettingsIcon, permission: "settings" },
   { href: "/admin/sync", label: "Actualizar precios", Icon: RefreshCwIcon, permission: "sync" },
 ];
 

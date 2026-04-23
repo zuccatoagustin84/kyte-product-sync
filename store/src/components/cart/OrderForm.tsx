@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCartStore } from "@/lib/cart-store";
@@ -74,6 +74,14 @@ export function OrderForm({ onBack }: OrderFormProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<OrderResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [requireLogin, setRequireLogin] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetch("/api/settings/public")
+      .then((r) => r.json())
+      .then((b) => setRequireLogin(Boolean(b.require_login_for_orders)))
+      .catch(() => {});
+  }, []);
 
   const orderTotal = total();
 
@@ -151,6 +159,61 @@ export function OrderForm({ onBack }: OrderFormProps) {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Gate: si login es obligatorio y no hay sesión, mostramos CTA de login
+  if (requireLogin && !user) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 gap-5 px-6 py-10 text-center">
+        <div className="w-14 h-14 rounded-full bg-orange-50 flex items-center justify-center">
+          <svg
+            className="w-7 h-7 text-orange-500"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 11c0-1.657-1.343-3-3-3S6 9.343 6 11m12 0a6 6 0 11-12 0 6 6 0 0112 0z"
+            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">
+            Iniciá sesión para continuar
+          </h3>
+          <p className="text-sm text-gray-500 mt-1 max-w-xs">
+            Los pedidos son sólo para clientes con cuenta. Si ya tenés una,
+            ingresá para completar el pedido.
+          </p>
+        </div>
+        <Link
+          href={`/login?next=${encodeURIComponent("/")}`}
+          onClick={closeCart}
+          className="w-full max-w-xs inline-flex items-center justify-center h-11 rounded-xl bg-[#e85d04] hover:bg-[#c94e03] text-white font-semibold text-sm transition-colors"
+        >
+          Iniciar sesión
+        </Link>
+        <Link
+          href="/registro"
+          onClick={closeCart}
+          className="text-sm text-gray-500 underline underline-offset-2 hover:text-gray-700"
+        >
+          Solicitar una cuenta
+        </Link>
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-xs text-gray-400 hover:text-gray-600 mt-2"
+        >
+          Volver al carrito
+        </button>
+      </div>
+    );
   }
 
   // Success state

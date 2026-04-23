@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Turnstile } from "@marsidev/react-turnstile";
 import { signUp } from "@/lib/auth-client";
@@ -48,8 +48,45 @@ export default function RegistroPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signupOpen, setSignupOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings/public")
+      .then((r) => r.json())
+      .then((b) => setSignupOpen(Boolean(b.allow_public_signup)))
+      .catch(() => setSignupOpen(true));
+  }, []);
 
   const strength = getPasswordStrength(password);
+
+  if (signupOpen === false) {
+    return (
+      <>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Registro cerrado</h1>
+        <p className="text-sm text-gray-500 mb-6">
+          Por el momento el registro es <strong>sólo por invitación del administrador</strong>.
+          Si ya tenés una cuenta, iniciá sesión abajo. Si no, contactanos para solicitar acceso.
+        </p>
+        <Link
+          href="/login"
+          className="block w-full h-12 rounded-xl text-base font-semibold text-white text-center leading-[3rem]"
+          style={{ backgroundColor: "var(--brand, #ea580c)" }}
+        >
+          Iniciar sesión
+        </Link>
+        <p className="mt-6 text-center text-sm text-gray-500">
+          ¿Necesitás una cuenta? Escribinos a{" "}
+          <a
+            href="mailto:mptools.mayorista@gmail.com"
+            className="font-medium hover:underline"
+            style={{ color: "var(--brand, #ea580c)" }}
+          >
+            mptools.mayorista@gmail.com
+          </a>
+        </p>
+      </>
+    );
+  }
 
   function handleGoogle() {
     setGoogleLoading(true);
