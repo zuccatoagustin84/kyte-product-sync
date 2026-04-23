@@ -243,6 +243,13 @@ export default function PedidosAdmin() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState<string>("");
 
+  // Seller assignment
+  const [sellerOptions, setSellerOptions] = useState<
+    { id: string; full_name: string | null }[]
+  >([]);
+  const [newSellerUserId, setNewSellerUserId] = useState<string>("");
+  const [updatingSeller, setUpdatingSeller] = useState(false);
+
   // Payment form
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<PaymentMethod>("efectivo");
@@ -260,6 +267,25 @@ export default function PedidosAdmin() {
       const res = await fetch("/api/admin/order-statuses");
       const body = await res.json();
       if (res.ok) setStatuses((body.statuses as OrderStatusRow[]) ?? []);
+    })();
+  }, []);
+
+  // Load admin+operador list once (for seller assignment)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, role")
+        .in("role", ["admin", "operador"])
+        .order("full_name");
+      if (data) {
+        setSellerOptions(
+          data.map((p) => ({
+            id: p.id as string,
+            full_name: (p.full_name as string) ?? null,
+          }))
+        );
+      }
     })();
   }, []);
 
@@ -374,6 +400,7 @@ export default function PedidosAdmin() {
     setDetailLoading(true);
     setInternalNotes(order.notes_internal ?? "");
     setNewStatus(order.status);
+    setNewSellerUserId(order.seller_user_id ?? "");
     setPayAmount("");
     setPayMethod("efectivo");
     setPayReference("");
@@ -469,6 +496,53 @@ export default function PedidosAdmin() {
       await refreshDetailAfterChange(selected.id);
     } finally {
       setUpdatingStatus(false);
+    }
+  }
+
+  async function applySeller() {
+    if (!selected) return;
+    const current = selected.seller_user_id ?? "";
+    if (newSellerUserId === current) return;
+    setUpdatingSeller(true);
+    try {
+      const payload = {
+        seller_user_id: newSellerUserId === "" ? null : newSellerUserId,
+      };
+      const res = await fetch(`/api/admin/orders/${selected.id}/seller`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) return;
+      const body = await res.json();
+      const fresh = body.order as Order | undefined;
+      const newSellerId = fresh?.seller_user_id ?? null;
+
+      let sellerName: string | null = null;
+      if (newSellerId) {
+        const opt = sellerOptions.find((s) => s.id === newSellerId);
+        sellerName = opt?.full_name ?? sellerMap[newSellerId] ?? null;
+        if (sellerName) {
+          setSellerMap((prev) =>
+            prev[newSellerId] === sellerName
+              ? prev
+              : { ...prev, [newSellerId]: sellerName as string }
+          );
+        }
+      }
+
+      setSelected((prev) =>
+        prev
+          ? { ...prev, seller_user_id: newSellerId, seller_name: sellerName }
+          : prev
+      );
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === selected.id ? { ...o, seller_user_id: newSellerId } : o
+        )
+      );
+    } finally {
+      setUpdatingSeller(false);
     }
   }
 
@@ -806,12 +880,6 @@ export default function PedidosAdmin() {
                 )}
               </section>
 
-              {/* Seller */}
-              {selected.seller_name && (
-                <section className="text-xs text-gray-500">
-                  Vendedor: <span className="font-medium text-gray-700">{selected.seller_name}</span>
-                </section>
-              )}
 
               {selected.notes && (
                 <section className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
@@ -990,6 +1058,45 @@ export default function PedidosAdmin() {
                     </Button>
                   </div>
                 )}
+              </section>
+
+              {/* Seller assignment */}
+              <section className="rounded-lg border border-gray-200 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900 text-sm">Vendedor</h3>
+                  {selected.seller_name && (
+                    <span className="text-xs text-gray-500">
+                      Actual:{" "}
+                      <span className="font-medium text-gray-700">
+                        {selected.seller_name}
+                      </span>
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <select
+                    value={newSellerUserId}
+                    onChange={(e) => setNewSellerUserId(e.target.value)}
+                    className="h-9 flex-1 rounded-lg border border-input bg-white px-3 text-sm"
+                  >
+                    <option value="">Sin asignar</option>
+                    {sellerOptions.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name || u.id.slice(0, 8)}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    onClick={applySeller}
+                    disabled={
+                      updatingSeller ||
+                      newSellerUserId === (selected.seller_user_id ?? "")
+                    }
+                    className="bg-orange-500 hover:bg-orange-600 text-white border-0"
+                  >
+                    {updatingSeller ? "Guardando..." : "Aplicar"}
+                  </Button>
+                </div>
               </section>
 
               {/* Status change */}
