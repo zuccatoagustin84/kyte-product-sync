@@ -103,12 +103,18 @@ export async function POST(request: NextRequest) {
   }
 
   // 2) Asegurar profile (el trigger de Supabase puede haberlo creado ya)
+  //    company = customer.name (razón social) y phone = customer.phone
+  //    para que el cliente vea sus datos en /perfil sin tener que editarlos.
+  const profileCompany = body.customer?.name ?? null;
+  const profilePhone = body.customer?.phone ?? null;
   await supabase
     .from("profiles")
     .upsert(
       {
         id: userId,
         full_name: body.full_name ?? null,
+        company: profileCompany,
+        phone: profilePhone,
         role,
         is_active: true,
       },
