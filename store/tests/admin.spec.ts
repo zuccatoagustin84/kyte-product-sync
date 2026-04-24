@@ -80,7 +80,11 @@ test.describe("Admin productos — CRUD", () => {
     // Submit
     await page.getByRole("button", { name: /Crear|Guardar/i }).last().click();
 
-    // Product should appear in the table
+    // Sheet cierra al crear OK; buscar por código para verificar que existe
+    // (con 1200+ productos ordenados por nombre, el nuevo podría no estar en pág 1)
+    await page.waitForTimeout(800);
+    await page.getByPlaceholder(/Buscar/i).fill("TEST-PW-001");
+    await page.waitForTimeout(800);
     await expect(page.getByText(TEST_PRODUCT_NAME)).toBeVisible({
       timeout: 10000,
     });
