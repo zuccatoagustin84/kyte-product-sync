@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { tryGetCurrentTenant } from "@/lib/tenant";
+import { createServiceClient } from "@/lib/supabase";
 
 /**
  * GET /auth/callback
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
   );
 
   // Sign in with the Google ID token — creates user if needed
-  const { error } = await supabase.auth.signInWithIdToken({
+  const { data: signInData, error } = await supabase.auth.signInWithIdToken({
     provider: "google",
     token: tokens.id_token,
     access_token: tokens.access_token,
@@ -71,6 +73,26 @@ export async function GET(request: NextRequest) {
   if (error) {
     console.error("Supabase signInWithIdToken failed:", error.message);
     return NextResponse.redirect(`${origin}/login?error=auth`);
+  }
+
+  // Asignar company_id al profile si todavía no lo tiene (multi-tenancy).
+  // El profile lo crea un trigger de Supabase; acá sólo seteamos el tenant
+  // resuelto por proxy.ts en base al subdomain/dominio actual.
+  const tenant = await tryGetCurrentTenant();
+  const userId = signInData?.user?.id;
+  if (tenant && userId) {
+    const service = createServiceClient();
+    const { data: existing } = await service
+      .from("profiles")
+      .select("id, company_id, role")
+      .eq("id", userId)
+      .maybeSingle();
+    if (existing && existing.role !== "superadmin" && !existing.company_id) {
+      await service
+        .from("profiles")
+        .update({ company_id: tenant.id })
+        .eq("id", userId);
+    }
   }
 
   return NextResponse.redirect(`${origin}${next}`);

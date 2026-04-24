@@ -1,10 +1,12 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const url = new URL(request.url);
   const from = url.searchParams.get("from");
@@ -17,6 +19,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("expenses")
     .select("*, supplier:suppliers(id,name), category:expense_categories(id,name,color)")
+    .eq("company_id", companyId)
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
     .limit(1000);
@@ -47,8 +50,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   let body: Record<string, unknown>;
   try {
@@ -74,6 +78,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase
     .from("expenses")
     .insert({
+      company_id: companyId,
       name,
       supplier_id: body.supplier_id || null,
       category_id: body.category_id || null,

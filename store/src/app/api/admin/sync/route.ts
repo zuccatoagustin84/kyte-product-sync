@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireRole } from "@/lib/rbac-server";
 import { createServiceClient } from "@/lib/supabase";
+import { getCurrentTenant } from "@/lib/tenant";
 import * as XLSX from "xlsx";
 
 // ── Excel parsing ─────────────────────────────────────────────────────────────
@@ -86,8 +87,9 @@ export type SyncPreviewItem = {
 // ── Main route handler ────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const apply = request.nextUrl.searchParams.get("apply") === "true";
   const create = request.nextUrl.searchParams.get("create") === "true";
@@ -116,11 +118,12 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "El archivo no contiene filas válidas" }, { status: 400 });
   }
 
-  // Obtener todos los productos de Supabase
+  // Obtener todos los productos de Supabase de esta company
   const supabase = createServiceClient();
   const { data: storeProducts, error: fetchError } = await supabase
     .from("products")
     .select("id, name, code, sale_price")
+    .eq("company_id", companyId)
     .not("code", "is", null);
 
   if (fetchError) {
@@ -203,7 +206,8 @@ export async function POST(request: NextRequest) {
       const { error } = await supabase
         .from("products")
         .update({ sale_price: newPrice, cost_price: newPrice, updated_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("company_id", companyId);
       if (error) updateErrors.push({ code, error: error.message });
       else updateSuccess++;
     }
@@ -224,6 +228,7 @@ export async function POST(request: NextRequest) {
       const id = `${Date.now()}-new`;
       const { error } = await supabase.from("products").insert({
         id: `${id}-${Math.random().toString(36).slice(2, 6)}`,
+        company_id: companyId,
         name: item.name,
         code: item.code,
         sale_price: item.newPrice,

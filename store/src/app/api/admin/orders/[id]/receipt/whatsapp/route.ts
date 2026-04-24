@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { hasPermission } from "@/lib/rbac";
+import { getCurrentTenant } from "@/lib/tenant";
 
 const PAYMENT_LABELS: Record<string, string> = {
   efectivo: "Efectivo",
@@ -39,11 +40,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
   if (!hasPermission(auth.role, "pos")) {
     return Response.json({ error: "Sin permiso" }, { status: 403 });
   }
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
   const supabase = createServiceClient();
@@ -52,6 +54,7 @@ export async function GET(
     .from("orders")
     .select("*")
     .eq("id", id)
+    .eq("company_id", companyId)
     .single();
   if (error || !order) {
     return Response.json({ error: "Pedido no encontrado" }, { status: 404 });
@@ -60,11 +63,13 @@ export async function GET(
   const { data: items } = await supabase
     .from("order_items")
     .select("*")
-    .eq("order_id", id);
+    .eq("order_id", id)
+    .eq("company_id", companyId);
   const { data: payments } = await supabase
     .from("order_payments")
     .select("*")
-    .eq("order_id", id);
+    .eq("order_id", id)
+    .eq("company_id", companyId);
 
   const lines: string[] = [];
   lines.push("*MP.TOOLS MAYORISTA*");

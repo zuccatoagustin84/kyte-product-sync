@@ -1,13 +1,15 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
   const supabase = createServiceClient();
@@ -16,6 +18,7 @@ export async function GET(
     .from("order_status_history")
     .select("id, order_id, status, changed_by, changed_at, notes")
     .eq("order_id", id)
+    .eq("company_id", companyId)
     .order("changed_at", { ascending: false });
 
   if (error) {

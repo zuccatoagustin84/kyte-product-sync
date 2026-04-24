@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 type UpdateSellerPayload = {
   seller_user_id?: string | null;
@@ -13,8 +14,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
 
@@ -48,7 +50,7 @@ export async function PATCH(
   if (sellerId !== null) {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, full_name, role")
+      .select("id, full_name, role, company_id")
       .eq("id", sellerId)
       .single();
 
@@ -56,6 +58,14 @@ export async function PATCH(
       return Response.json(
         { error: "Vendedor no encontrado" },
         { status: 404 }
+      );
+    }
+
+    // Ensure the seller belongs to the same company
+    if (profile.company_id !== companyId) {
+      return Response.json(
+        { error: "El vendedor no pertenece a esta empresa" },
+        { status: 400 }
       );
     }
 
@@ -75,6 +85,7 @@ export async function PATCH(
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
+    .eq("company_id", companyId)
     .select()
     .single();
 

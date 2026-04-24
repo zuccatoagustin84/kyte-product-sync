@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 type OrderStatus =
   | "pending"
@@ -36,8 +37,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
 
@@ -106,6 +108,7 @@ export async function PATCH(
     .from("orders")
     .select("status")
     .eq("id", id)
+    .eq("company_id", companyId)
     .single();
 
   if (prevError) {
@@ -119,6 +122,7 @@ export async function PATCH(
     .from("orders")
     .update(update)
     .eq("id", id)
+    .eq("company_id", companyId)
     .select()
     .single();
 
@@ -132,6 +136,7 @@ export async function PATCH(
   // Insert status history entry if status changed
   if (body.status !== undefined && body.status !== prevOrder?.status) {
     await supabase.from("order_status_history").insert({
+      company_id: companyId,
       order_id: id,
       status: body.status,
       changed_by: auth.userId,

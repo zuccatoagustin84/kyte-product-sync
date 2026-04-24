@@ -1,10 +1,12 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const url = new URL(request.url);
   const q = url.searchParams.get("q")?.trim() ?? "";
@@ -14,6 +16,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("suppliers")
     .select("*")
+    .eq("company_id", companyId)
     .order("name", { ascending: true })
     .limit(500);
 
@@ -27,6 +30,7 @@ export async function GET(request: NextRequest) {
   const { data: pending } = await supabase
     .from("expenses")
     .select("supplier_id, amount")
+    .eq("company_id", companyId)
     .in("status", ["pending", "overdue"])
     .not("supplier_id", "is", null);
 
@@ -48,8 +52,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   let body: Record<string, unknown>;
   try {
@@ -65,6 +70,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase
     .from("suppliers")
     .insert({
+      company_id: companyId,
       name,
       doc_id: body.doc_id || null,
       email: body.email || null,

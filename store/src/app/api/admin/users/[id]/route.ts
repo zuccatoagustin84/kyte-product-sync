@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 type Role = "admin" | "operador" | "user";
 const VALID_ROLES: Role[] = ["admin", "operador", "user"];
@@ -41,16 +42,19 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   const supabase = createServiceClient();
 
+  // Filtramos también por company_id — un user de otra company devuelve 404.
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("id, full_name, company, phone, role, is_active")
     .eq("id", id)
+    .eq("company_id", companyId)
     .single();
 
   if (error) {
@@ -93,8 +97,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   let body: {
@@ -137,12 +142,25 @@ export async function PATCH(
 
   const supabase = createServiceClient();
 
+  // Tenant cross-check: verificar que el target user pertenezca a esta company
+  // antes de cualquier mutación. user_permissions hereda tenant via profiles.
+  const { data: targetProfile } = await supabase
+    .from("profiles")
+    .select("id, company_id")
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!targetProfile) {
+    return Response.json({ error: "Usuario no encontrado" }, { status: 404 });
+  }
+
   let profile: Record<string, unknown> | null = null;
   if (role !== undefined) {
     const { data, error } = await supabase
       .from("profiles")
       .update({ role })
       .eq("id", id)
+      .eq("company_id", companyId)
       .select("id, full_name, company, phone, role, is_active")
       .single();
 

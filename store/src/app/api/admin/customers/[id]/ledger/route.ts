@@ -1,20 +1,36 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   const supabase = createServiceClient();
+
+  // Verify the customer belongs to this company
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("id")
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!customer) {
+    return Response.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+
   const { data, error } = await supabase
     .from("customer_ledger")
     .select("*")
     .eq("customer_id", id)
+    .eq("company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(500);
 
@@ -35,8 +51,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   let body: PostBody;
@@ -56,9 +73,23 @@ export async function POST(
   }
 
   const supabase = createServiceClient();
+
+  // Verify the customer belongs to this company
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("id")
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!customer) {
+    return Response.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+
   const { data, error } = await supabase
     .from("customer_ledger")
     .insert({
+      company_id: companyId,
       customer_id: id,
       entry_type: body.entry_type,
       amount,

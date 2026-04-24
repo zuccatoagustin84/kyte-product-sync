@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getUser, createSupabaseServer } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase";
+import { getCurrentTenant } from "@/lib/tenant";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SignOutButton from "./SignOutButton";
@@ -78,6 +79,7 @@ export default async function PerfilPage() {
     redirect("/login?next=/perfil");
   }
 
+  const { id: companyId } = await getCurrentTenant();
   const supabase = await createSupabaseServer();
 
   // Fetch profile
@@ -85,12 +87,14 @@ export default async function PerfilPage() {
     .from("profiles")
     .select("id, full_name, company, phone, role")
     .eq("id", user.id)
+    .eq("company_id", companyId)
     .single<Profile>();
 
   // Fetch orders
   const { data: orders } = await supabase
     .from("orders")
     .select("id, created_at, total, status")
+    .eq("company_id", companyId)
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -100,6 +104,7 @@ export default async function PerfilPage() {
   const { data: linkedCustomer } = await service
     .from("customers")
     .select("*")
+    .eq("company_id", companyId)
     .eq("user_id", user.id)
     .eq("active", true)
     .maybeSingle<Customer>();
@@ -109,6 +114,7 @@ export default async function PerfilPage() {
     const { data: entries } = await service
       .from("customer_ledger")
       .select("*")
+      .eq("company_id", companyId)
       .eq("customer_id", linkedCustomer.id)
       .order("created_at", { ascending: false })
       .limit(10);

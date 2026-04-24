@@ -2,10 +2,12 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { normalizeTags } from "@/lib/tags";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   let body: Record<string, unknown>;
   try {
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
     "description",
     "tags",
   ];
-  const insert: Record<string, unknown> = { id };
+  const insert: Record<string, unknown> = { id, company_id: companyId };
   for (const key of allowed) {
     if (key in body) {
       insert[key] = body[key];

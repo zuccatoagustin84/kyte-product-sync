@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET() {
   try {
+    const { id: companyId } = await getCurrentTenant();
     const supabase = createServiceClient();
 
     const { data: categories, error } = await supabase
       .from("categories")
       .select("*")
+      .eq("company_id", companyId)
       .order("sort_order");
 
     if (error) {

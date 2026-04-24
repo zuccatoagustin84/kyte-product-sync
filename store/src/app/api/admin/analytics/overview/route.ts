@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 type OrderRow = {
   id: string;
@@ -37,8 +38,9 @@ type ProfileRow = { id: string; full_name: string | null };
 type UserPermRow = { user_id: string; commission_rate: number | null };
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const url = new URL(request.url);
   const fromParam = url.searchParams.get("from");
@@ -59,6 +61,7 @@ export async function GET(request: NextRequest) {
     .select(
       "id, customer_id, customer_name, seller_user_id, channel, subtotal, discount_total, total, status, payment_status, created_at"
     )
+    .eq("company_id", companyId)
     .neq("status", "cancelled")
     .gte("created_at", from.toISOString())
     .lte("created_at", to.toISOString())
@@ -79,6 +82,7 @@ export async function GET(request: NextRequest) {
       .select(
         "order_id, product_id, product_name, product_code, unit_price, quantity, cost_snapshot, subtotal"
       )
+      .eq("company_id", companyId)
       .in("order_id", orderIds);
     if (itemsErr) {
       return Response.json({ error: itemsErr.message }, { status: 500 });
@@ -92,6 +96,7 @@ export async function GET(request: NextRequest) {
     const { data: paymentsData } = await supabase
       .from("order_payments")
       .select("order_id, method, amount")
+      .eq("company_id", companyId)
       .in("order_id", orderIds);
     payments = (paymentsData ?? []) as OrderPaymentRow[];
   }
@@ -235,9 +240,17 @@ export async function GET(request: NextRequest) {
   let perms: UserPermRow[] = [];
   const sellerIds = [...sellerMap.keys()];
   if (sellerIds.length > 0) {
+    // profiles tiene company_id propio; user_permissions hereda company via profiles.
     const [{ data: profs }, { data: up }] = await Promise.all([
-      supabase.from("profiles").select("id, full_name").in("id", sellerIds),
-      supabase.from("user_permissions").select("user_id, commission_rate").in("user_id", sellerIds),
+      supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("company_id", companyId)
+        .in("id", sellerIds),
+      supabase
+        .from("user_permissions")
+        .select("user_id, commission_rate")
+        .in("user_id", sellerIds),
     ]);
     profiles = (profs ?? []) as ProfileRow[];
     perms = (up ?? []) as UserPermRow[];

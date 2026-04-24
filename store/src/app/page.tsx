@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { useTenantId } from "@/components/TenantProvider";
 import type { Category, Product } from "@/lib/types";
 import { Header } from "@/components/Header";
 import { CategorySidebar } from "@/components/catalog/CategorySidebar";
@@ -36,6 +37,7 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode
 }
 
 export default function Home() {
+  const tenantId = useTenantId();
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -60,17 +62,19 @@ export default function Home() {
     supabase
       .from("categories")
       .select("*")
+      .eq("company_id", tenantId)
       .order("sort_order")
       .then(({ data }) => {
         if (data) setCategories(data as Category[]);
       });
-  }, []);
+  }, [tenantId]);
 
   // Cargar tags únicos de todos los productos activos (independiente de filtros)
   useEffect(() => {
     supabase
       .from("products")
       .select("tags")
+      .eq("company_id", tenantId)
       .eq("active", true)
       .not("tags", "is", null)
       .then(({ data }) => {
@@ -86,13 +90,14 @@ export default function Home() {
           .map(([tag]) => tag);
         setAvailableTags(sorted);
       });
-  }, []);
+  }, [tenantId]);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     let query = supabase
       .from("products")
       .select("*, category:categories(id,name)")
+      .eq("company_id", tenantId)
       .eq("active", true);
 
     if (selectedCategory) {
@@ -108,7 +113,7 @@ export default function Home() {
     const { data } = await query.order("sort_order").limit(200);
     setProducts((data as Product[]) ?? []);
     setLoading(false);
-  }, [selectedCategory, selectedTag, search]);
+  }, [selectedCategory, selectedTag, search, tenantId]);
 
   useEffect(() => {
     fetchProducts();

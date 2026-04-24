@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { supabase } from "@/lib/supabase";
+import { useTenantId } from "@/components/TenantProvider";
 import { formatMoney, formatDate } from "@/lib/format";
 import type { Order, OrderItem, OrderPayment } from "@/lib/types";
 
@@ -20,6 +21,7 @@ export default function TicketPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const tenantId = useTenantId();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<OrderItem[]>([]);
@@ -29,11 +31,21 @@ export default function TicketPage({
   useEffect(() => {
     async function load() {
       const [o, i, p] = await Promise.all([
-        supabase.from("orders").select("*").eq("id", id).single(),
-        supabase.from("order_items").select("*").eq("order_id", id),
+        supabase
+          .from("orders")
+          .select("*")
+          .eq("company_id", tenantId)
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("order_items")
+          .select("*")
+          .eq("company_id", tenantId)
+          .eq("order_id", id),
         supabase
           .from("order_payments")
           .select("*")
+          .eq("company_id", tenantId)
           .eq("order_id", id)
           .order("paid_at", { ascending: true }),
       ]);
@@ -43,7 +55,7 @@ export default function TicketPage({
       setLoading(false);
     }
     load();
-  }, [id]);
+  }, [id, tenantId]);
 
   useEffect(() => {
     if (!loading && order) {

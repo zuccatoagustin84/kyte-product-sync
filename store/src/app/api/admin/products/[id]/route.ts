@@ -2,13 +2,15 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { normalizeTags } from "@/lib/tags";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
 
@@ -49,10 +51,23 @@ export async function PUT(
 
   const supabase = createServiceClient();
 
+  // Verify the product belongs to this company before updating.
+  const { data: existing } = await supabase
+    .from("products")
+    .select("id")
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!existing) {
+    return Response.json({ error: "Producto no encontrado" }, { status: 404 });
+  }
+
   const { data, error } = await supabase
     .from("products")
     .update(update)
     .eq("id", id)
+    .eq("company_id", companyId)
     .select("*, category:categories(id,name)")
     .single();
 
@@ -70,14 +85,19 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
 
   const supabase = createServiceClient();
 
-  const { error } = await supabase.from("products").delete().eq("id", id);
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", id)
+    .eq("company_id", companyId);
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });

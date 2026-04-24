@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 type Mode = "password" | "invite";
 
@@ -40,8 +41,9 @@ function randomPassword(len = 12): string {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   let body: Body;
   try {
@@ -105,6 +107,7 @@ export async function POST(request: NextRequest) {
   // 2) Asegurar profile (el trigger de Supabase puede haberlo creado ya)
   //    company = customer.name (razón social) y phone = customer.phone
   //    para que el cliente vea sus datos en /perfil sin tener que editarlos.
+  //    El profile se asigna a la company actual del request.
   const profileCompany = body.customer?.name ?? null;
   const profilePhone = body.customer?.phone ?? null;
   await supabase
@@ -117,11 +120,14 @@ export async function POST(request: NextRequest) {
         phone: profilePhone,
         role,
         is_active: true,
+        company_id: companyId,
       },
       { onConflict: "id" }
     );
 
   // 3) Sincronizar is_admin en user_permissions
+  //    user_permissions no tiene company_id propio — su tenant se infiere via
+  //    profiles.company_id (que ya seteamos arriba).
   await supabase
     .from("user_permissions")
     .upsert(
@@ -137,10 +143,24 @@ export async function POST(request: NextRequest) {
   let customerId: string | null = null;
 
   if (body.customer_id) {
+    // Verificar que el customer pertenezca a esta company antes de linkear.
+    const { data: existingCustomer } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("id", body.customer_id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!existingCustomer) {
+      return Response.json(
+        { error: "Customer no encontrado en esta company" },
+        { status: 404 }
+      );
+    }
     const { error } = await supabase
       .from("customers")
       .update({ user_id: userId, updated_at: new Date().toISOString() })
-      .eq("id", body.customer_id);
+      .eq("id", body.customer_id)
+      .eq("company_id", companyId);
     if (error) {
       return Response.json(
         { error: `Usuario creado pero no se pudo linkear customer: ${error.message}` },
@@ -154,6 +174,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from("customers")
       .insert({
+        company_id: companyId,
         name,
         doc_id: c.doc_id ?? null,
         email,

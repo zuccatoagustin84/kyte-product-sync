@@ -1,13 +1,15 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   const supabase = createServiceClient();
@@ -15,6 +17,7 @@ export async function GET(
     .from("customers")
     .select("*")
     .eq("id", id)
+    .eq("company_id", companyId)
     .single();
 
   if (error) {
@@ -30,8 +33,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   let body: Record<string, unknown>;
@@ -62,10 +66,24 @@ export async function PATCH(
   for (const k of allowed) if (k in body) update[k] = body[k];
 
   const supabase = createServiceClient();
+
+  // Verify the customer belongs to this company before updating
+  const { data: existing } = await supabase
+    .from("customers")
+    .select("id")
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!existing) {
+    return Response.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+
   const { data, error } = await supabase
     .from("customers")
     .update(update)
     .eq("id", id)
+    .eq("company_id", companyId)
     .select()
     .single();
 
@@ -77,15 +95,17 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   const supabase = createServiceClient();
   const { error } = await supabase
     .from("customers")
     .update({ active: false, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("company_id", companyId);
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ ok: true });

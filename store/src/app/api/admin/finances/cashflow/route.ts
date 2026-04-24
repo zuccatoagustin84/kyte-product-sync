@@ -1,13 +1,15 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 // Aggregate daily cashflow in JS — the `cash_flow_daily` view lumps sales and
 // customer payments together as "inflow"; we want ingresos from orders +
 // customer payments, egresos from paid expenses, and balance.
 export async function GET(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const url = new URL(request.url);
   const from = url.searchParams.get("from");
@@ -28,6 +30,7 @@ export async function GET(request: NextRequest) {
     supabase
       .from("orders")
       .select("created_at, total, payment_status, status")
+      .eq("company_id", companyId)
       .eq("payment_status", "paid")
       .neq("status", "cancelled")
       .gte("created_at", fromIso)
@@ -35,6 +38,7 @@ export async function GET(request: NextRequest) {
     supabase
       .from("expenses")
       .select("paid_at, amount, status")
+      .eq("company_id", companyId)
       .not("paid_at", "is", null)
       .neq("status", "cancelled")
       .gte("paid_at", fromIso)

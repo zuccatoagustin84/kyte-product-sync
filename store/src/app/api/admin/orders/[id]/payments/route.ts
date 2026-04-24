@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 const VALID_METHODS = [
   "efectivo",
@@ -17,8 +18,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   const supabase = createServiceClient();
@@ -26,6 +28,7 @@ export async function GET(
     .from("order_payments")
     .select("*")
     .eq("order_id", id)
+    .eq("company_id", companyId)
     .order("paid_at", { ascending: false });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
@@ -43,8 +46,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   let body: PostBody;
@@ -64,11 +68,12 @@ export async function POST(
 
   const supabase = createServiceClient();
 
-  // Ensure order exists and get its total
+  // Ensure order exists in this company and get its total
   const { data: order, error: orderErr } = await supabase
     .from("orders")
     .select("id, total")
     .eq("id", id)
+    .eq("company_id", companyId)
     .single();
 
   if (orderErr) {
@@ -82,6 +87,7 @@ export async function POST(
   const { data: payment, error: payErr } = await supabase
     .from("order_payments")
     .insert({
+      company_id: companyId,
       order_id: id,
       method: body.method,
       amount,
@@ -98,7 +104,8 @@ export async function POST(
   const { data: allPays } = await supabase
     .from("order_payments")
     .select("amount")
-    .eq("order_id", id);
+    .eq("order_id", id)
+    .eq("company_id", companyId);
 
   const totalPaid = (allPays ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0);
   const orderTotal = Number(order.total ?? 0);
@@ -112,6 +119,7 @@ export async function POST(
     .from("orders")
     .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
     .eq("id", id)
+    .eq("company_id", companyId)
     .select()
     .single();
 

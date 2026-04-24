@@ -1,15 +1,18 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("expense_categories")
     .select("*")
+    .eq("company_id", companyId)
     .order("sort_order", { ascending: true });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
@@ -17,8 +20,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   let body: Record<string, unknown>;
   try {
@@ -34,6 +38,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase
     .from("expense_categories")
     .insert({
+      company_id: companyId,
       name,
       color: body.color || "#64748b",
       sort_order: Number(body.sort_order ?? 50),

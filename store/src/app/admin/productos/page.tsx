@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { useTenantId } from "@/components/TenantProvider";
 import type { Product, Category } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ function emptyForm(p?: Product): EditForm {
 }
 
 export default function ProductosAdmin() {
+  const tenantId = useTenantId();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,17 +89,19 @@ export default function ProductosAdmin() {
     supabase
       .from("categories")
       .select("*")
+      .eq("company_id", tenantId)
       .order("sort_order")
       .then(({ data }) => {
         if (data) setCategories(data as Category[]);
       });
-  }, []);
+  }, [tenantId]);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     let query = supabase
       .from("products")
-      .select("*, category:categories(id,name)", { count: "exact" });
+      .select("*, category:categories(id,name)", { count: "exact" })
+      .eq("company_id", tenantId);
 
     if (search.trim()) {
       query = query.or(
@@ -121,7 +125,7 @@ export default function ProductosAdmin() {
     setTotal(count ?? 0);
     setLoading(false);
     setSelected(new Set());
-  }, [search, filterCategory, filterActive, page]);
+  }, [search, filterCategory, filterActive, page, tenantId]);
 
   useEffect(() => {
     setPage(0);

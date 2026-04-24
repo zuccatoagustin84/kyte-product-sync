@@ -48,12 +48,14 @@ const allNavItems: NavItem[] = [
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
+  superadmin: "Superadmin",
   admin: "Admin",
   operador: "Operador",
   user: "Usuario",
 };
 
 const ROLE_COLORS: Record<Role, string> = {
+  superadmin: "bg-purple-600 text-white",
   admin: "bg-orange-500 text-white",
   operador: "bg-blue-500 text-white",
   user: "bg-gray-500 text-white",

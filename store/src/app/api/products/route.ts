@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(request: NextRequest) {
   try {
+    const { id: companyId } = await getCurrentTenant();
     const { searchParams } = request.nextUrl;
     const category = searchParams.get("category");
     const search = searchParams.get("search");
@@ -14,6 +16,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("products")
       .select("*, category:categories(id,name)")
+      .eq("company_id", companyId)
       .eq("active", true);
 
     if (category) {

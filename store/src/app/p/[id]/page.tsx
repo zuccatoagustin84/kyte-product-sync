@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { getCurrentTenant } from "@/lib/tenant";
 import { ProductDetail } from "@/components/product/ProductDetail";
 import type { Product } from "@/lib/types";
 import { Header } from "@/components/Header";
@@ -12,10 +13,12 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
+  const { id: companyId } = await getCurrentTenant();
   const supabase = await createSupabaseServer();
   const { data: product } = await supabase
     .from("products")
     .select("*, category:categories(id,name)")
+    .eq("company_id", companyId)
     .eq("id", id)
     .eq("active", true)
     .single();
@@ -41,10 +44,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductPage({ params }: Props) {
   const { id } = await params;
+  const { id: companyId } = await getCurrentTenant();
   const supabase = await createSupabaseServer();
   const { data: product } = await supabase
     .from("products")
     .select("*, category:categories(id,name)")
+    .eq("company_id", companyId)
     .eq("id", id)
     .eq("active", true)
     .single();

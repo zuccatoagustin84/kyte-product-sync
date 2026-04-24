@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 type Role = "admin" | "operador" | "user";
 const VALID_ROLES: Role[] = ["admin", "operador", "user"];
@@ -38,26 +39,34 @@ function emptyPermissions(userId: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const supabase = createServiceClient();
 
-  // Fetch profiles
+  // Fetch profiles — solo de la company actual.
   const { data: profiles, error } = await supabase
     .from("profiles")
     .select("id, full_name, company, phone, role")
+    .eq("company_id", companyId)
     .order("full_name");
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  // Fetch permissions for all profiles
-  const { data: perms } = await supabase.from("user_permissions").select("*");
+  // Fetch permissions solo para los profiles de esta company.
+  const profileIds = (profiles ?? []).map((p) => p.id);
   const permsMap: Record<string, Record<string, unknown>> = {};
-  for (const p of perms ?? []) {
-    permsMap[p.user_id as string] = p as Record<string, unknown>;
+  if (profileIds.length > 0) {
+    const { data: perms } = await supabase
+      .from("user_permissions")
+      .select("*")
+      .in("user_id", profileIds);
+    for (const p of perms ?? []) {
+      permsMap[p.user_id as string] = p as Record<string, unknown>;
+    }
   }
 
   // Attempt to enrich with emails from auth.users via service role
@@ -89,8 +98,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const auth = await requireRole(request, ["admin"]);
+  const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   let body: {
     userId?: string;
@@ -139,6 +149,18 @@ export async function PATCH(request: NextRequest) {
 
   const supabase = createServiceClient();
 
+  // Tenant cross-check: el target user debe pertenecer a la misma company.
+  // user_permissions no tiene company_id directo — se infiere via profiles.
+  const { data: targetProfile } = await supabase
+    .from("profiles")
+    .select("id, company_id")
+    .eq("id", userId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!targetProfile) {
+    return Response.json({ error: "Usuario no encontrado" }, { status: 404 });
+  }
+
   // Update role if provided
   let profile: Record<string, unknown> | null = null;
   if (role !== undefined) {
@@ -146,6 +168,7 @@ export async function PATCH(request: NextRequest) {
       .from("profiles")
       .update({ role })
       .eq("id", userId)
+      .eq("company_id", companyId)
       .select("id, full_name, company, phone, role")
       .single();
 

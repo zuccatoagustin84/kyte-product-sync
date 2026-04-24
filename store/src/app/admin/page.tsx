@@ -1,9 +1,11 @@
 import { createServiceClient } from "@/lib/supabase";
+import { getCurrentTenant } from "@/lib/tenant";
 import { formatPrice } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 async function getDashboardStats() {
   const supabase = createServiceClient();
+  const { id: companyId } = await getCurrentTenant();
 
   const [
     { count: totalProducts },
@@ -14,15 +16,18 @@ async function getDashboardStats() {
     supabase
       .from("products")
       .select("*", { count: "exact", head: true })
+      .eq("company_id", companyId)
       .eq("active", true),
     supabase
       .from("orders")
-      .select("*", { count: "exact", head: true }),
+      .select("*", { count: "exact", head: true })
+      .eq("company_id", companyId),
     supabase
       .from("orders")
       .select("*", { count: "exact", head: true })
+      .eq("company_id", companyId)
       .eq("status", "pending"),
-    supabase.from("orders").select("total"),
+    supabase.from("orders").select("total").eq("company_id", companyId),
   ]);
 
   const totalRevenue = (revenueData ?? []).reduce(

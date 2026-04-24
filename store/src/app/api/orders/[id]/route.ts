@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   if (!id) {
@@ -14,11 +16,12 @@ export async function GET(
 
   const supabase = createServiceClient();
 
-  // Fetch order
+  // Fetch order — must belong to the current tenant
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select("id, customer_name, customer_phone, customer_email, customer_company, notes, total, status, created_at, user_id")
     .eq("id", id)
+    .eq("company_id", companyId)
     .single();
 
   if (orderError || !order) {
@@ -42,6 +45,7 @@ export async function GET(
     .from("order_items")
     .select("id, product_name, product_code, unit_price, quantity, subtotal")
     .eq("order_id", id)
+    .eq("company_id", companyId)
     .order("id", { ascending: true });
 
   return Response.json({

@@ -26,6 +26,7 @@ import {
   Loader2Icon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useTenantId } from "@/components/TenantProvider";
 import { formatMoney } from "@/lib/format";
 import type {
   Product,
@@ -81,6 +82,7 @@ function newPaymentRow(method: PaymentMethod = "efectivo"): PaymentRow {
 }
 
 export default function VenderPage() {
+  const tenantId = useTenantId();
   // ---------- Catalog state ----------
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -119,12 +121,14 @@ export default function VenderPage() {
         supabase
           .from("products")
           .select("*, category:categories(*)")
+          .eq("company_id", tenantId)
           .eq("active", true)
           .order("sort_order", { ascending: true })
           .limit(500),
         supabase
           .from("categories")
           .select("*")
+          .eq("company_id", tenantId)
           .order("sort_order", { ascending: true }),
       ]);
       setProducts((prods as Product[]) ?? []);
@@ -132,7 +136,7 @@ export default function VenderPage() {
       setLoadingCatalog(false);
     }
     load();
-  }, []);
+  }, [tenantId]);
 
   // ---------- Customer search ----------
   useEffect(() => {

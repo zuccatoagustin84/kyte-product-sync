@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { hasPermission } from "@/lib/rbac";
+import { getCurrentTenant } from "@/lib/tenant";
 import type { PaymentMethod, PaymentStatus } from "@/lib/types";
 
 type CheckoutItem = {
@@ -42,8 +43,9 @@ function round2(n: number): number {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   if (!hasPermission(auth.role, "pos")) {
     return Response.json({ error: "Sin permiso para POS" }, { status: 403 });
@@ -89,11 +91,14 @@ export async function POST(request: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Fetch products to snapshot name/code/cost and validate
+  // Fetch products to snapshot name/code/cost and validate.
+  // Filtramos por company para asegurar que no se pueda vender un producto
+  // de otra company.
   const productIds = body.items.map((i) => i.product_id);
   const { data: products, error: prodErr } = await supabase
     .from("products")
     .select("id, name, code, cost_price, stock, sale_price")
+    .eq("company_id", companyId)
     .in("id", productIds);
 
   if (prodErr) {
@@ -150,6 +155,7 @@ export async function POST(request: NextRequest) {
       .from("customers")
       .select("id, allow_pay_later")
       .eq("id", body.customer_id)
+      .eq("company_id", companyId)
       .single();
     if (!cust || !cust.allow_pay_later) {
       return Response.json(
@@ -169,7 +175,8 @@ export async function POST(request: NextRequest) {
     paymentStatus = "pending";
   }
 
-  // Customer snapshot fields (for searching/display even if no customer_id)
+  // Customer snapshot fields (for searching/display even if no customer_id).
+  // Si viene customer_id, validamos que pertenezca a esta company.
   let customer_phone: string | null = null;
   let customer_email: string | null = null;
   if (body.customer_id) {
@@ -177,6 +184,7 @@ export async function POST(request: NextRequest) {
       .from("customers")
       .select("phone, email")
       .eq("id", body.customer_id)
+      .eq("company_id", companyId)
       .single();
     if (cust) {
       customer_phone = cust.phone ?? null;
@@ -188,6 +196,7 @@ export async function POST(request: NextRequest) {
   const { data: order, error: ordErr } = await supabase
     .from("orders")
     .insert({
+      company_id: companyId,
       customer_id: body.customer_id ?? null,
       customer_name: customerName,
       customer_phone,
@@ -218,19 +227,20 @@ export async function POST(request: NextRequest) {
   const orderItemsPayload = itemsWithSnapshot.map((it) => {
     const { _stock: _omit, ...rest } = it;
     void _omit;
-    return { order_id: order.id, ...rest };
+    return { company_id: companyId, order_id: order.id, ...rest };
   });
   const { error: itemsErr } = await supabase
     .from("order_items")
     .insert(orderItemsPayload);
   if (itemsErr) {
     // Rollback order
-    await supabase.from("orders").delete().eq("id", order.id);
+    await supabase.from("orders").delete().eq("id", order.id).eq("company_id", companyId);
     return Response.json({ error: itemsErr.message }, { status: 500 });
   }
 
   // Insert payments
   const paymentsPayload = body.payments.map((p) => ({
+    company_id: companyId,
     order_id: order.id,
     method: p.method,
     amount: round2(Number(p.amount)),
@@ -241,13 +251,14 @@ export async function POST(request: NextRequest) {
     .from("order_payments")
     .insert(paymentsPayload);
   if (payErr) {
-    await supabase.from("order_items").delete().eq("order_id", order.id);
-    await supabase.from("orders").delete().eq("id", order.id);
+    await supabase.from("order_items").delete().eq("order_id", order.id).eq("company_id", companyId);
+    await supabase.from("orders").delete().eq("id", order.id).eq("company_id", companyId);
     return Response.json({ error: payErr.message }, { status: 500 });
   }
 
   // Insert status history entry
   await supabase.from("order_status_history").insert({
+    company_id: companyId,
     order_id: order.id,
     status: "confirmed",
     changed_by: auth.userId,
@@ -270,10 +281,12 @@ export async function POST(request: NextRequest) {
           .from("customers")
           .select("balance")
           .eq("id", body.customer_id)
+          .eq("company_id", companyId)
           .single();
         const prevBal = Number(cur?.balance ?? 0);
         const newBal = round2(prevBal - creditOwed);
         await supabase.from("customer_ledger").insert({
+          company_id: companyId,
           customer_id: body.customer_id,
           entry_type: "sale",
           amount: -creditOwed,
@@ -293,7 +306,8 @@ export async function POST(request: NextRequest) {
       await supabase
         .from("products")
         .update({ stock: newStock })
-        .eq("id", item.product_id);
+        .eq("id", item.product_id)
+        .eq("company_id", companyId);
     }
   }
 

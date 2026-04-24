@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { hasPermission } from "@/lib/rbac";
+import { getCurrentTenant } from "@/lib/tenant";
 
 type TransactionRow = {
   id: string;
@@ -21,8 +22,9 @@ type TransactionRow = {
 };
 
 export async function GET(request: NextRequest) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   if (!hasPermission(auth.role, "transactions")) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -58,6 +60,7 @@ export async function GET(request: NextRequest) {
     .select(
       "id, created_at, total, customer_id, customer_name, customer_phone, seller_user_id, channel, status, payment_status, order_number"
     )
+    .eq("company_id", companyId)
     .neq("status", "cancelled")
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -90,6 +93,7 @@ export async function GET(request: NextRequest) {
     const { data: pays } = await supabase
       .from("order_payments")
       .select("order_id, amount")
+      .eq("company_id", companyId)
       .in("order_id", orderIds);
     for (const p of pays ?? []) {
       paidByOrder[p.order_id] = (paidByOrder[p.order_id] ?? 0) + Number(p.amount ?? 0);
@@ -102,6 +106,7 @@ export async function GET(request: NextRequest) {
     const { data: items } = await supabase
       .from("order_items")
       .select("order_id")
+      .eq("company_id", companyId)
       .in("order_id", orderIds);
     for (const it of items ?? []) {
       itemsByOrder[it.order_id] = (itemsByOrder[it.order_id] ?? 0) + 1;
@@ -114,6 +119,7 @@ export async function GET(request: NextRequest) {
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, full_name")
+      .eq("company_id", companyId)
       .in("id", sellerIds);
     for (const p of profiles ?? []) {
       sellerNameById[p.id] = p.full_name ?? "";
@@ -143,7 +149,11 @@ export async function GET(request: NextRequest) {
   const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const buildKpi = (since?: string, pendingOnly = false) => {
-    let k = supabase.from("orders").select("total", { count: "exact" }).neq("status", "cancelled");
+    let k = supabase
+      .from("orders")
+      .select("total", { count: "exact" })
+      .eq("company_id", companyId)
+      .neq("status", "cancelled");
     if (since) k = k.gte("created_at", since);
     if (pendingOnly) k = k.neq("payment_status", "paid");
     if (effectiveSellerId) k = k.eq("seller_user_id", effectiveSellerId);

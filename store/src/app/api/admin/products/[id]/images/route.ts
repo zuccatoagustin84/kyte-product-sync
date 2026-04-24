@@ -1,12 +1,14 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 // GET /api/admin/products/[id]/images — list images for a product
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
   const supabase = createServiceClient();
 
@@ -14,6 +16,7 @@ export async function GET(
     .from("product_images")
     .select("*")
     .eq("product_id", id)
+    .eq("company_id", companyId)
     .order("sort_order");
 
   if (error) {
@@ -28,11 +31,24 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
   const supabase = createServiceClient();
+
+  // Verify the product belongs to this company before any uploads.
+  const { data: ownerCheck } = await supabase
+    .from("products")
+    .select("id")
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!ownerCheck) {
+    return Response.json({ error: "Producto no encontrado" }, { status: 404 });
+  }
 
   // Parse multipart form data
   const formData = await request.formData();
@@ -86,7 +102,8 @@ export async function POST(
   const { count } = await supabase
     .from("product_images")
     .select("*", { count: "exact", head: true })
-    .eq("product_id", id);
+    .eq("product_id", id)
+    .eq("company_id", companyId);
 
   const isFirst = (count ?? 0) === 0;
 
@@ -94,6 +111,7 @@ export async function POST(
   const { data: imageRow, error: insertError } = await supabase
     .from("product_images")
     .insert({
+      company_id: companyId,
       product_id: id,
       url,
       sort_order: count ?? 0,
@@ -111,7 +129,8 @@ export async function POST(
     await supabase
       .from("products")
       .update({ image_url: url })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("company_id", companyId);
   }
 
   return Response.json({ image: imageRow }, { status: 201 });
@@ -122,11 +141,24 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
   const supabase = createServiceClient();
+
+  // Verify the product belongs to this company.
+  const { data: ownerCheck } = await supabase
+    .from("products")
+    .select("id")
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!ownerCheck) {
+    return Response.json({ error: "Producto no encontrado" }, { status: 404 });
+  }
 
   let body: { images: { id: string; sort_order: number; is_primary: boolean }[] };
   try {
@@ -141,7 +173,8 @@ export async function PUT(
       .from("product_images")
       .update({ sort_order: img.sort_order, is_primary: img.is_primary })
       .eq("id", img.id)
-      .eq("product_id", id);
+      .eq("product_id", id)
+      .eq("company_id", companyId);
   }
 
   // Update products.image_url with the primary image
@@ -151,13 +184,15 @@ export async function PUT(
       .from("product_images")
       .select("url")
       .eq("id", primary.id)
+      .eq("company_id", companyId)
       .single();
 
     if (primaryImg) {
       await supabase
         .from("products")
         .update({ image_url: primaryImg.url })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("company_id", companyId);
     }
   }
 
@@ -169,8 +204,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
 
   const { id } = await params;
   const imageId = request.nextUrl.searchParams.get("image_id");
@@ -181,12 +217,13 @@ export async function DELETE(
 
   const supabase = createServiceClient();
 
-  // Get image record first
+  // Get image record first — filter by company to prevent cross-tenant deletes.
   const { data: img } = await supabase
     .from("product_images")
     .select("*")
     .eq("id", imageId)
     .eq("product_id", id)
+    .eq("company_id", companyId)
     .single();
 
   if (!img) {
@@ -206,7 +243,8 @@ export async function DELETE(
   await supabase
     .from("product_images")
     .delete()
-    .eq("id", imageId);
+    .eq("id", imageId)
+    .eq("company_id", companyId);
 
   // If it was primary, promote the next image
   if (img.is_primary) {
@@ -214,6 +252,7 @@ export async function DELETE(
       .from("product_images")
       .select("*")
       .eq("product_id", id)
+      .eq("company_id", companyId)
       .order("sort_order")
       .limit(1)
       .single();
@@ -222,17 +261,20 @@ export async function DELETE(
       await supabase
         .from("product_images")
         .update({ is_primary: true })
-        .eq("id", next.id);
+        .eq("id", next.id)
+        .eq("company_id", companyId);
       await supabase
         .from("products")
         .update({ image_url: next.url })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("company_id", companyId);
     } else {
       // No more images
       await supabase
         .from("products")
         .update({ image_url: null })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("company_id", companyId);
     }
   }
 

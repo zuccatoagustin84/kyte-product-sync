@@ -17,6 +17,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useTenantId } from "@/components/TenantProvider";
 import type {
   Order,
   OrderItem,
@@ -222,6 +223,7 @@ function whatsappLink(phone: string | null, name: string, orderNumber: number | 
 // ---------------------------------------------------------------------------
 
 export default function PedidosAdmin() {
+  const tenantId = useTenantId();
   const [orders, setOrders] = useState<Order[]>([]);
   const [statuses, setStatuses] = useState<OrderStatusRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,6 +278,7 @@ export default function PedidosAdmin() {
       const { data } = await supabase
         .from("profiles")
         .select("id, full_name, role")
+        .eq("company_id", tenantId)
         .in("role", ["admin", "operador"])
         .order("full_name");
       if (data) {
@@ -287,7 +290,7 @@ export default function PedidosAdmin() {
         );
       }
     })();
-  }, []);
+  }, [tenantId]);
 
   const statusesByName = useMemo(() => {
     const m: Record<string, OrderStatusRow> = {};
@@ -301,6 +304,7 @@ export default function PedidosAdmin() {
     let query = supabase
       .from("orders")
       .select("*")
+      .eq("company_id", tenantId)
       .order("created_at", { ascending: false });
 
     if (statusFilter !== "all") query = query.eq("status", statusFilter);
@@ -337,7 +341,7 @@ export default function PedidosAdmin() {
 
     setOrders(list);
     setLoading(false);
-  }, [statusFilter, channelFilter, paymentFilter, q, datePreset, customFrom, customTo]);
+  }, [statusFilter, channelFilter, paymentFilter, q, datePreset, customFrom, customTo, tenantId]);
 
   useEffect(() => {
     const t = setTimeout(fetchOrders, 200);

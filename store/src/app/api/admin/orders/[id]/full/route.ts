@@ -1,13 +1,15 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
+import { getCurrentTenant } from "@/lib/tenant";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireRole(request, ["admin", "operador"]);
+  const auth = await requireRole(request, ["admin", "operador", "superadmin"]);
   if (auth instanceof Response) return auth;
+  const { id: companyId } = await getCurrentTenant();
   const { id } = await params;
 
   const supabase = createServiceClient();
@@ -16,6 +18,7 @@ export async function GET(
     .from("orders")
     .select("*")
     .eq("id", id)
+    .eq("company_id", companyId)
     .single();
 
   if (error) {
@@ -26,16 +29,22 @@ export async function GET(
   }
 
   const [itemsRes, paymentsRes, historyRes] = await Promise.all([
-    supabase.from("order_items").select("*").eq("order_id", id),
+    supabase
+      .from("order_items")
+      .select("*")
+      .eq("order_id", id)
+      .eq("company_id", companyId),
     supabase
       .from("order_payments")
       .select("*")
       .eq("order_id", id)
+      .eq("company_id", companyId)
       .order("paid_at", { ascending: false }),
     supabase
       .from("order_status_history")
       .select("*")
       .eq("order_id", id)
+      .eq("company_id", companyId)
       .order("changed_at", { ascending: false }),
   ]);
 
@@ -56,6 +65,7 @@ export async function GET(
       .from("customers")
       .select("*")
       .eq("id", order.customer_id)
+      .eq("company_id", companyId)
       .maybeSingle();
     customer = c ?? null;
   }

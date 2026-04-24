@@ -2,9 +2,11 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getAppSettings } from "@/lib/app-settings";
+import { getCurrentTenant } from "@/lib/tenant";
 import type { OrderPayload } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
+  const { id: companyId } = await getCurrentTenant();
   let body: OrderPayload;
 
   try {
@@ -36,7 +38,7 @@ export async function POST(request: NextRequest) {
     // sin sesión
   }
 
-  const settings = await getAppSettings();
+  const settings = await getAppSettings(companyId);
   if (settings.require_login_for_orders && !userId) {
     return Response.json(
       { error: "Tenés que iniciar sesión para hacer un pedido", code: "LOGIN_REQUIRED" },
@@ -46,22 +48,24 @@ export async function POST(request: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Si hay usuario logueado con customer linkeado, usamos esa ficha
+  // Si hay usuario logueado con customer linkeado de esta company, usamos esa ficha
   let linkedCustomerId: string | null = null;
   if (userId) {
     const { data: linked } = await supabase
       .from("customers")
       .select("id")
       .eq("user_id", userId)
+      .eq("company_id", companyId)
       .eq("active", true)
       .maybeSingle();
     linkedCustomerId = linked?.id ?? null;
   }
 
-  // Insert order
+  // Insert order — company_id es NOT NULL en la tabla post-migración 005.
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({
+      company_id: companyId,
       customer_name: body.customer_name.trim(),
       customer_phone: body.customer_phone?.trim() || null,
       customer_email: body.customer_email?.trim() || null,
@@ -83,8 +87,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Insert order items
+  // Insert order items — heredan company_id del order parent.
   const orderItems = body.items.map((item) => ({
+    company_id: companyId,
     order_id: order.id,
     product_id: item.product_id,
     product_name: item.product_name,

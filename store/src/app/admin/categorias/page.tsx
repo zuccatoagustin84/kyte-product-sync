@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useTenantId } from "@/components/TenantProvider";
 import type { Category } from "@/lib/types";
 
 export default function CategoriasAdmin() {
+  const tenantId = useTenantId();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -16,12 +18,13 @@ export default function CategoriasAdmin() {
     supabase
       .from("categories")
       .select("*")
+      .eq("company_id", tenantId)
       .order("sort_order")
       .then(({ data }) => {
         if (data) setCategories(data as Category[]);
         setLoading(false);
       });
-  }, []);
+  }, [tenantId]);
 
   const handleDragStart = (id: string) => {
     dragId.current = id;

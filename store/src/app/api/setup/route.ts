@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
+import { tryGetCurrentTenant } from "@/lib/tenant";
 
 export async function POST(request: NextRequest) {
   // Optional: check SETUP_SECRET header if the env var is defined
@@ -13,21 +14,48 @@ export async function POST(request: NextRequest) {
 
   const service = createServiceClient();
 
-  // Check if any admin already exists — security gate
-  const { count, error: countError } = await service
-    .from("profiles")
-    .select("id", { count: "exact", head: true })
-    .eq("role", "admin");
+  // Resolver tenant — puede ser null si /setup se llama contra el host raíz
+  // antes de tener companies (bootstrap del superadmin) o si el tenant todavía
+  // no está creado. Caso por caso:
+  //   - Sin tenant: bootstrap → user con role=superadmin y company_id=NULL.
+  //   - Con tenant: setup del primer admin de esa company → role=admin,
+  //     company_id=tenant.id.
+  const tenant = await tryGetCurrentTenant();
 
-  if (countError) {
-    return Response.json({ error: countError.message }, { status: 500 });
-  }
+  // Security gate: distinto según el caso.
+  //   - Sin tenant: ya existe un superadmin? abortamos.
+  //   - Con tenant: ya existe un admin en esa company? abortamos.
+  if (tenant) {
+    const { count, error: countError } = await service
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "admin")
+      .eq("company_id", tenant.id);
 
-  if (count !== null && count > 0) {
-    return Response.json(
-      { error: "Setup ya completado" },
-      { status: 403 }
-    );
+    if (countError) {
+      return Response.json({ error: countError.message }, { status: 500 });
+    }
+    if (count !== null && count > 0) {
+      return Response.json(
+        { error: "Setup ya completado" },
+        { status: 403 }
+      );
+    }
+  } else {
+    const { count, error: countError } = await service
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "superadmin");
+
+    if (countError) {
+      return Response.json({ error: countError.message }, { status: 500 });
+    }
+    if (count !== null && count > 0) {
+      return Response.json(
+        { error: "Setup ya completado" },
+        { status: 403 }
+      );
+    }
   }
 
   // Parse body
@@ -71,14 +99,16 @@ export async function POST(request: NextRequest) {
 
   const userId = authData.user.id;
 
-  // Upsert the profile row with role = 'admin'
-  // (a trigger may have already inserted it; use upsert to be safe)
+  // Upsert the profile row with role + company_id according to bootstrap mode.
+  const role = tenant ? "admin" : "superadmin";
+  const companyId = tenant ? tenant.id : null;
   const { error: profileError } = await service
     .from("profiles")
     .upsert({
       id: userId,
       full_name: fullName,
-      role: "admin",
+      role,
+      company_id: companyId,
     });
 
   if (profileError) {
@@ -88,7 +118,7 @@ export async function POST(request: NextRequest) {
   }
 
   return Response.json(
-    { success: true, message: "Admin creado" },
+    { success: true, message: tenant ? "Admin creado" : "Superadmin creado" },
     { status: 201 }
   );
 }
