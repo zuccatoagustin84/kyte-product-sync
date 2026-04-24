@@ -41,7 +41,10 @@ test.describe("Superadmin backoffice", () => {
     await expect(page.getByRole("heading", { name: "Backoffice" })).toBeVisible(
       { timeout: 10000 }
     );
-    await expect(page.getByText("Companies", { exact: true })).toBeVisible();
+    // "Companies" aparece como label de stat card y como heading "Companies recientes"
+    await expect(
+      page.getByRole("heading", { name: /Companies recientes/i })
+    ).toBeVisible({ timeout: 8000 });
   });
 
   test("admin (no superadmin) es bounceado de /superadmin", async ({ page }) => {

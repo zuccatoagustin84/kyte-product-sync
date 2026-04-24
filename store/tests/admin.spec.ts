@@ -77,17 +77,25 @@ test.describe("Admin productos — CRUD", () => {
     await page.getByLabel(/Precio venta/i).fill("9999");
     await page.getByLabel(/Código/i).fill("TEST-PW-001");
 
-    // Submit
+    // Submit y esperar la respuesta del POST (sheet cierra al ok)
+    const createPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/products") && r.request().method() === "POST",
+      { timeout: 10000 }
+    );
     await page.getByRole("button", { name: /Crear|Guardar/i }).last().click();
+    const createRes = await createPromise;
+    expect(createRes.ok()).toBe(true);
 
-    // Sheet cierra al crear OK; buscar por código para verificar que existe
-    // (con 1200+ productos ordenados por nombre, el nuevo podría no estar en pág 1)
-    await page.waitForTimeout(800);
+    // Buscar por código para verificarlo en la tabla
+    // (con 1200+ productos ordenados por nombre, el nuevo no está en pág 1)
     await page.getByPlaceholder(/Buscar/i).fill("TEST-PW-001");
-    await page.waitForTimeout(800);
-    await expect(page.getByText(TEST_PRODUCT_NAME)).toBeVisible({
-      timeout: 10000,
-    });
+    await page.waitForTimeout(1500);
+    const row = page
+      .getByRole("row")
+      .filter({ hasText: "TEST-PW-001" })
+      .first();
+    await expect(row).toBeVisible({ timeout: 10000 });
   });
 
   test("eliminar producto creado por el test", async ({ page }) => {
