@@ -86,8 +86,10 @@ export async function resolveTenantFromHost(
     if (bySlug) return bySlug as Tenant;
   }
 
-  // 3) Fallback a default tenant si está configurado
-  const fallbackSlug = process.env.DEFAULT_TENANT_SLUG;
+  // 3) Fallback a default tenant si está configurado.
+  // Hardcoded a "mptools" para el demo en *.vercel.app (donde el slug del subdomain
+  // es el nombre del proyecto, no un tenant). Override con DEFAULT_TENANT_SLUG.
+  const fallbackSlug = process.env.DEFAULT_TENANT_SLUG ?? "mptools";
   if (fallbackSlug) {
     const { data: byFallback } = await supabase
       .from("companies")
