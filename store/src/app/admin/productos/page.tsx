@@ -260,25 +260,29 @@ export default function ProductosAdmin() {
   function renderFormFields(
     f: EditForm,
     setF: (v: EditForm) => void,
-    error: string
+    error: string,
+    prefix: "edit" | "create" = "edit"
   ) {
+    const fid = (k: string) => `${prefix}-${k}`;
     return (
       <div className="px-4 py-4 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor={fid("name")} className="block text-sm font-medium text-gray-700 mb-1">
             Nombre
           </label>
           <Input
+            id={fid("name")}
             value={f.name}
             onChange={(e) => setF({ ...f, name: e.target.value })}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor={fid("code")} className="block text-sm font-medium text-gray-700 mb-1">
             Código
           </label>
           <Input
+            id={fid("code")}
             value={f.code}
             onChange={(e) => setF({ ...f, code: e.target.value })}
           />
@@ -286,20 +290,22 @@ export default function ProductosAdmin() {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={fid("sale_price")} className="block text-sm font-medium text-gray-700 mb-1">
               Precio venta
             </label>
             <Input
+              id={fid("sale_price")}
               type="number"
               value={f.sale_price}
               onChange={(e) => setF({ ...f, sale_price: e.target.value })}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={fid("cost_price")} className="block text-sm font-medium text-gray-700 mb-1">
               Precio costo
             </label>
             <Input
+              id={fid("cost_price")}
               type="number"
               value={f.cost_price}
               onChange={(e) => setF({ ...f, cost_price: e.target.value })}
@@ -309,20 +315,22 @@ export default function ProductosAdmin() {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={fid("stock")} className="block text-sm font-medium text-gray-700 mb-1">
               Stock
             </label>
             <Input
+              id={fid("stock")}
               type="number"
               value={f.stock}
               onChange={(e) => setF({ ...f, stock: e.target.value })}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor={fid("min_order")} className="block text-sm font-medium text-gray-700 mb-1">
               Pedido mínimo
             </label>
             <Input
+              id={fid("min_order")}
               type="number"
               value={f.min_order}
               onChange={(e) => setF({ ...f, min_order: e.target.value })}
@@ -331,10 +339,11 @@ export default function ProductosAdmin() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor={fid("category")} className="block text-sm font-medium text-gray-700 mb-1">
             Categoría
           </label>
           <select
+            id={fid("category")}
             value={f.category_id}
             onChange={(e) => setF({ ...f, category_id: e.target.value })}
             className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm focus-visible:border-ring outline-none"
@@ -349,10 +358,11 @@ export default function ProductosAdmin() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor={fid("description")} className="block text-sm font-medium text-gray-700 mb-1">
             Descripción
           </label>
           <textarea
+            id={fid("description")}
             value={f.description}
             onChange={(e) => setF({ ...f, description: e.target.value })}
             rows={5}
@@ -659,7 +669,7 @@ export default function ProductosAdmin() {
             <SheetTitle>Nuevo producto</SheetTitle>
           </SheetHeader>
 
-          {renderFormFields(createForm, setCreateForm, createError)}
+          {renderFormFields(createForm, setCreateForm, createError, "create")}
 
           <SheetFooter>
             <Button variant="outline" onClick={() => setCreatingOpen(false)}>
