@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { getCurrentTenant } from "@/lib/tenant";
+import { log } from "@/lib/log";
 
 export async function GET(
   request: NextRequest,
@@ -110,6 +111,25 @@ export async function POST(
     .select()
     .single();
 
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) {
+    log.error("ledger_insert_failed", {
+      company_id: companyId,
+      customer_id: id,
+      entry_type: body.entry_type,
+      amount: signedAmount,
+      db_error: error.message,
+    });
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+
+  log.info("ledger_entry_recorded", {
+    company_id: companyId,
+    customer_id: id,
+    user_id: auth.userId,
+    entry_type: body.entry_type,
+    amount: signedAmount,
+    balance_after: balanceAfter,
+  });
+
   return Response.json({ entry: data });
 }

@@ -7,6 +7,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { log, errToCtx } from "@/lib/log";
 
 export default function AppError({
   error,
@@ -16,7 +17,7 @@ export default function AppError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[app/error]", error);
+    log.error("app_error_boundary", { digest: error.digest, ...errToCtx(error) });
   }, [error]);
 
   return (

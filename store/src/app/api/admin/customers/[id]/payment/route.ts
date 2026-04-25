@@ -21,6 +21,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { getCurrentTenant } from "@/lib/tenant";
 import { computePaymentStatus } from "@/lib/payment-utils";
+import { log } from "@/lib/log";
 
 type Body = {
   amount: number;
@@ -129,6 +130,14 @@ export async function POST(
       created_by: auth.userId,
     });
     if (insertErr) {
+      log.error("payment_insert_failed", {
+        company_id: companyId,
+        customer_id: customerId,
+        order_id: a.order_id,
+        amount: a.amount,
+        method,
+        db_error: insertErr.message,
+      });
       return Response.json(
         { error: `Error guardando pago para orden ${a.order_id}: ${insertErr.message}` },
         { status: 500 }
@@ -201,8 +210,27 @@ export async function POST(
     .single();
 
   if (ledgerErr) {
+    log.error("payment_ledger_insert_failed", {
+      company_id: companyId,
+      customer_id: customerId,
+      amount,
+      allocations_count: allocations.length,
+      new_balance: newBalance,
+      db_error: ledgerErr.message,
+    });
     return Response.json({ error: ledgerErr.message }, { status: 500 });
   }
+
+  log.info("payment_recorded", {
+    company_id: companyId,
+    customer_id: customerId,
+    user_id: auth.userId,
+    amount,
+    method,
+    allocations_count: allocations.length,
+    on_account: amount - allocatedSum,
+    new_balance: newBalance,
+  });
 
   return Response.json({
     payment: ledgerEntry,

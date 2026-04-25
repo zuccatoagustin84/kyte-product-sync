@@ -5,6 +5,7 @@
 // su propio <html> y <body> porque el layout raíz no está disponible.
 
 import { useEffect } from "react";
+import { log, errToCtx } from "@/lib/log";
 
 export default function GlobalError({
   error,
@@ -14,7 +15,10 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[global-error]", error);
+    log.error("global_error_boundary", {
+      digest: error.digest,
+      ...errToCtx(error),
+    });
   }, [error]);
 
   return (

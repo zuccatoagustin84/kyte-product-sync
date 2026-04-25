@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { log, errToCtx } from "@/lib/log";
 
 export default function AdminError({
   error,
@@ -11,7 +12,10 @@ export default function AdminError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[admin/error]", error);
+    log.error("admin_error_boundary", {
+      digest: error.digest,
+      ...errToCtx(error),
+    });
   }, [error]);
 
   return (
