@@ -236,6 +236,65 @@ class KyteClient:
         except Exception:
             return {"status": "ok", "status_code": resp.status_code}
 
+    def create_product(self, product: dict) -> dict:
+        """
+        Create a new product via POST /product.
+
+        The payload should look like an existing product (same shape returned
+        by get_products), minus _id and timestamps. Use build_product_payload()
+        as a helper to derive a payload from a known-good template product.
+        """
+        cleaned = self._clean_images_for_put(product)
+        resp = self._request("POST", "/product", json=cleaned)
+        try:
+            return resp.json()
+        except Exception:
+            return {"status": "ok", "status_code": resp.status_code}
+
+    def build_product_payload(
+        self,
+        template: dict,
+        code: str,
+        name: str,
+        sale_price: float,
+        category: dict | None = None,
+        cost_price: float | None = None,
+        description: str = "",
+    ) -> dict:
+        """
+        Build a POST payload by cloning a template product and overriding
+        the fields that must differ (code, name, price, category).
+
+        Strips identity/audit fields so the server treats this as a new doc.
+        Clears images so the new product starts without media.
+        """
+        import copy
+        p = copy.deepcopy(template)
+
+        # Drop identity/audit fields — Kyte assigns these on insert.
+        for f in ("_id", "id", "createdAt", "updatedAt", "modifiedAt", "createdBy", "updatedBy"):
+            p.pop(f, None)
+
+        # Clear images on new product (avoid pointing to the template's media).
+        for f in ("image", "imageLarge", "imageMedium", "imageThumb"):
+            p[f] = ""
+        p["gallery"] = []
+
+        # Override the fields that define this product.
+        p["code"] = code
+        p["name"] = name
+        p["salePrice"] = float(sale_price)
+        if cost_price is not None:
+            p["saleCostPrice"] = float(cost_price)
+        if description:
+            p["description"] = description
+        if category is not None:
+            p["category"] = category
+
+        # Make sure aid is set.
+        p["aid"] = self.config.aid
+        return p
+
     def update_product_price(
         self,
         product: dict,

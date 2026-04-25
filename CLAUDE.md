@@ -66,10 +66,18 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 
 ## IMPORTANT RULES
 - **NEVER use `unquote()` on image paths**
-- **NEVER create products** - only PUT (update) existing ones
 - **Always `--dry-run` first** before applying
 - **Match by code only** - no name matching
 - Test account (Agustin Zuccato) uid/aid: `2Bj9r4qNoYRd5JdTXX0rHMI9hjg2` / `2Bj9r4qNoYRd5J`
+
+## Crear productos (Streamlit)
+La app permite crear productos en Kyte (POST `/product`) desde la pestaña
+**"En Excel, no en Kyte"**. Solo se ofrecen los marcados como **SIN MATCH** con
+código no vacío y precio > 0. La selección por defecto es vacía y requiere
+elegir categoría destino y confirmar antes del POST.
+
+El payload se arma en `KyteClient.build_product_payload()` clonando un producto
+existente como plantilla, eliminando `_id`/timestamps y vaciando imágenes.
 
 ## Las 5 opciones de uso
 1. **CLI** — `python sync_prices_api.py --dry-run`
