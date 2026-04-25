@@ -747,6 +747,9 @@ if page == "Imágenes":
 
     code = (selected.get("code") or "").strip()
     name = (selected.get("name") or "").strip()
+    _cat = selected.get("category") or {}
+    cat_name = (_cat.get("name") if isinstance(_cat, dict) else "") or ""
+    cat_name = cat_name.strip()
     cur_img_raw = selected.get("image") or ""
     pid = selected.get("id") or selected.get("_id") or f"{code}__{name}"
 
@@ -776,9 +779,45 @@ if page == "Imágenes":
         st.session_state.pop("img_picked", None)
         st.session_state.pop("img_searched_query", None)
 
-    # Default: code + nombre (más certero que código solo para distribuidores)
-    _default_parts = [code, (name or "")[:60]]
-    default_q = " ".join(p for p in _default_parts if p).strip()
+    # Toggles: qué incluir en la búsqueda
+    tc1, tc2, tc3 = st.columns(3)
+    with tc1:
+        use_code = st.checkbox(
+            f"Código ({code})" if code else "Código",
+            value=bool(code),
+            disabled=not code,
+            key=f"img_use_code_{pid}",
+        )
+    with tc2:
+        use_name = st.checkbox(
+            f"Nombre" + (f" ({name[:30]}…)" if len(name) > 30 else f" ({name})" if name else ""),
+            value=bool(name),
+            disabled=not name,
+            key=f"img_use_name_{pid}",
+        )
+    with tc3:
+        use_cat = st.checkbox(
+            f"Categoría ({cat_name})" if cat_name else "Categoría",
+            value=False,
+            disabled=not cat_name,
+            key=f"img_use_cat_{pid}",
+        )
+
+    _parts: list[str] = []
+    if use_code and code:
+        _parts.append(code)
+    if use_name and name:
+        _parts.append(name[:60])
+    if use_cat and cat_name:
+        _parts.append(cat_name)
+    default_q = " ".join(_parts).strip()
+
+    # Si cambian los toggles, refrescar el input con el nuevo default
+    _sig = (use_code, use_name, use_cat)
+    _sig_key = f"_img_qsig_{pid}"
+    if st.session_state.get(_sig_key) != _sig:
+        st.session_state[_sig_key] = _sig
+        st.session_state[f"img_query_{pid}"] = default_q
 
     qc1, qc2, qc3 = st.columns([4, 1, 1])
     with qc1:
@@ -809,7 +848,7 @@ if page == "Imágenes":
         q_clean = query.strip()
         with st.spinner(f"Buscando '{q_clean}'..."):
             try:
-                st.session_state.img_results = _search_images_bing(q_clean, 12)
+                st.session_state.img_results = _search_images_bing(q_clean, 20)
                 st.session_state.img_searched_query = q_clean
                 st.session_state.pop("img_picked", None)
             except Exception as e:
