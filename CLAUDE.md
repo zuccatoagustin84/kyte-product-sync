@@ -84,6 +84,9 @@ The `_strip_image_field()` in `kyte_api.py` strips these before sending to preve
 - **Supabase**: proyecto `knxqeebtynqchhwdmxae` (org: MP Tools, región: sa-east-1)
 - 1221 productos y 16 categorías migrados desde Kyte
 - Funcionalidades: catálogo, búsqueda, carrito, pedidos → Supabase + WhatsApp
+- **Credenciales de test / staging**: ver [`store/docs/CREDENTIALS.md`](store/docs/CREDENTIALS.md)
+  - Default: `MPTools2026!` · Superadmin: `SuperMPTools2026!`
+  - Reset masivo: `node scripts/reset-all-passwords.mjs` (en `store/`)
 
 ### Múltiples imágenes por producto
 - **Tabla**: `product_images` (id, product_id, url, sort_order, is_primary, created_at)

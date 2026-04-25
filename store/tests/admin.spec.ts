@@ -5,7 +5,7 @@
  *
  * Test admin credentials:
  *   email:    admin.test@mptools-mayorista.com
- *   password: Admin@MPTools2026!
+ *   password: MPTools2026!
  */
 
 import { test, expect } from "@playwright/test";
@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test";
 const ADMIN_EMAIL =
   process.env.TEST_ADMIN_EMAIL ?? "admin.test@mptools-mayorista.com";
 const ADMIN_PASSWORD =
-  process.env.TEST_ADMIN_PASSWORD ?? "Admin@MPTools2026!";
+  process.env.TEST_ADMIN_PASSWORD ?? "MPTools2026!";
 
 const TEST_PRODUCT_NAME = `Producto Test Playwright ${Date.now()}`;
 

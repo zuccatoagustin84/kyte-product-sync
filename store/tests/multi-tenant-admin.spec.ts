@@ -20,7 +20,7 @@ import { test, expect } from "@playwright/test";
 const ADMIN_EMAIL =
   process.env.TEST_ADMIN_EMAIL ?? "admin.test@mptools-mayorista.com";
 const ADMIN_PASSWORD =
-  process.env.TEST_ADMIN_PASSWORD ?? "Admin@MPTools2026!";
+  process.env.TEST_ADMIN_PASSWORD ?? "MPTools2026!";
 
 // UUID v4 random — simula un recurso de OTRA company.
 function randomUuid(): string {

@@ -3,7 +3,7 @@
  *
  * Credentials por defecto:
  *   email:    superadmin.test@mptools-mayorista.com
- *   password: Super@MPTools2026!
+ *   password: SuperMPTools2026!
  *
  * El user fue creado en Supabase con role='superadmin' y company_id=NULL.
  */
@@ -13,12 +13,12 @@ import { test, expect } from "@playwright/test";
 const SUPER_EMAIL =
   process.env.TEST_SUPERADMIN_EMAIL ?? "superadmin.test@mptools-mayorista.com";
 const SUPER_PASSWORD =
-  process.env.TEST_SUPERADMIN_PASSWORD ?? "Super@MPTools2026!";
+  process.env.TEST_SUPERADMIN_PASSWORD ?? "SuperMPTools2026!";
 
 const ADMIN_EMAIL =
   process.env.TEST_ADMIN_EMAIL ?? "admin.test@mptools-mayorista.com";
 const ADMIN_PASSWORD =
-  process.env.TEST_ADMIN_PASSWORD ?? "Admin@MPTools2026!";
+  process.env.TEST_ADMIN_PASSWORD ?? "MPTools2026!";
 
 async function loginAs(
   page: import("@playwright/test").Page,
