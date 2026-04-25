@@ -236,6 +236,22 @@ class KyteClient:
         except Exception:
             return {"status": "ok", "status_code": resp.status_code}
 
+    def create_product(self, name: str, code: str, sale_price: float) -> dict:
+        """Create a new product via POST /product."""
+        payload = {
+            "name": name,
+            "code": code,
+            "salePrice": sale_price,
+            "aid": self.config.aid,
+            "active": True,
+            "trackStock": False,
+        }
+        resp = self._request("POST", "/product", json=payload)
+        try:
+            return resp.json()
+        except Exception:
+            return {"status": "ok", "status_code": resp.status_code}
+
     def update_product_price(
         self,
         product: dict,
