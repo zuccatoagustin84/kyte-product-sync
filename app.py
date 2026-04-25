@@ -717,6 +717,43 @@ if _refresh_col.button("↺ Refrescar Kyte"):
     st.rerun()
 _status_col.success(f"Kyte: {len(kyte_products)} productos (cache 5 min)")
 
+# ── Productos ocultos del catálogo (showOnCatalog=False) ────
+_hidden = [p for p in kyte_products if p.get("showOnCatalog") is False and p.get("active") is True]
+if _hidden:
+    with st.expander(f"🔧 {len(_hidden)} productos ocultos del catálogo (showOnCatalog=False) — activar"):
+        st.caption(
+            "Estos productos están activos pero ocultos del catálogo público. "
+            "Pasa cuando se crean por API sin `showOnCatalog=True`. Activarlos los hace visibles en Kyte web."
+        )
+        _hidden_rows = [{
+            "Codigo": p.get("code", ""),
+            "Nombre": p.get("name", ""),
+            "Precio": p.get("salePrice", 0),
+            "Categoria": (p.get("category") or {}).get("name", "") if isinstance(p.get("category"), dict) else "",
+        } for p in _hidden]
+        st.dataframe(pd.DataFrame(_hidden_rows), use_container_width=True, hide_index=True)
+        if st.button(f"⚡ Activar los {len(_hidden)} productos", type="primary", key="btn_activate_hidden"):
+            _prog = st.progress(0, text="Activando...")
+            _ok = 0
+            _fail = 0
+            _errs = []
+            for i, p in enumerate(_hidden):
+                try:
+                    client.activate_product(p)
+                    _ok += 1
+                except KyteAPIError as e:
+                    _fail += 1
+                    _errs.append(f"{p.get('code', '?')}: {e}")
+                _prog.progress((i + 1) / len(_hidden), text=f"Activando {i+1}/{len(_hidden)}...")
+            _prog.empty()
+            if _fail == 0:
+                st.success(f"✅ {_ok} productos activados correctamente.")
+                _fetch_kyte_products_cached.clear()
+            else:
+                st.warning(f"{_ok} OK, {_fail} fallaron.")
+                for _e in _errs:
+                    st.error(_e)
+
 # Matching también cacheado — solo recomputa si cambia el Excel o las columnas
 @st.cache_data(ttl=300, show_spinner=False)
 def _run_matching_cached(source_hash: str, kyte_n: int, code_col_: str, price_col_: str, name_col_: str | None,

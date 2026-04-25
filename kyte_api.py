@@ -244,14 +244,23 @@ class KyteClient:
         category_id: str | None = None,
         category_name: str | None = None,
     ) -> dict:
-        """Create a new product via POST /product."""
+        """Create a new product via POST /product.
+
+        Importante: showOnCatalog=True y uid=self.uid o el producto queda
+        oculto del catálogo (Kyte lo muestra como "desactivado" en el listado).
+        """
         payload = {
             "name": name,
             "code": code,
             "salePrice": sale_price,
             "aid": self.config.aid,
+            "uid": self.config.uid,
             "active": True,
+            "showOnCatalog": True,
             "trackStock": False,
+            "isFractioned": False,
+            "stockActive": False,
+            "stockStatus": "NOT_CONTROLLED",
         }
         if category_id:
             payload["categoryId"] = category_id
@@ -261,6 +270,19 @@ class KyteClient:
             return resp.json()
         except Exception:
             return {"status": "ok", "status_code": resp.status_code}
+
+    def activate_product(self, product: dict) -> dict:
+        """Marca un producto como visible en catálogo y activo.
+
+        Útil para arreglar productos creados con showOnCatalog=False.
+        Recibe el dict completo (de get_products) y hace PUT.
+        """
+        p = dict(product)
+        p["active"] = True
+        p["showOnCatalog"] = True
+        if not p.get("uid"):
+            p["uid"] = self.config.uid
+        return self.update_product(p)
 
     def create_category(self, name: str) -> dict:
         """Create a new product category via POST /products/category."""
