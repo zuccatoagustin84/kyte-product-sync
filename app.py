@@ -869,7 +869,8 @@ with tab_nomatch:
             st.session_state._csk = _csk
             st.session_state._create_sel = set()
 
-        df_cv = df_create[["Codigo", "Nombre", "Precio Nuevo"]].copy()
+        df_cv = df_create[["Codigo", "Nombre", "Precio Nuevo", "Rubro"]].copy()
+        df_cv = df_cv.rename(columns={"Nombre": "Descripcion", "Precio Nuevo": "Precio", "Rubro": "Categoria"})
         df_cv.insert(0, "Crear", df_cv["Codigo"].astype(str).str.lower().isin(st.session_state._create_sel))
 
         cca, ccb, _ = st.columns([1, 1, 4])
@@ -906,6 +907,40 @@ with tab_nomatch:
             if confirm_create:
                 if st.button(f"CREAR {n_to_create} PRODUCTOS", type="primary", key="btn_create_products"):
                     to_create = df_create[df_create["Codigo"].astype(str).str.lower().isin(st.session_state._create_sel)]
+
+                    # ── Resolución de categorías ──────────────
+                    with st.spinner("Resolviendo categorías en Kyte..."):
+                        try:
+                            kyte_cats = client.get_categories()
+                            cats_by_name = {
+                                c.get("name", "").strip().lower(): c
+                                for c in kyte_cats if c.get("name")
+                            }
+                        except KyteAPIError as e:
+                            st.error(f"Error obteniendo categorías: {e}")
+                            st.stop()
+
+                    unique_rubros = {
+                        str(r["Rubro"]).strip()
+                        for _, r in to_create.iterrows()
+                        if pd.notna(r["Rubro"]) and str(r["Rubro"]).strip()
+                    }
+                    for rubro in unique_rubros:
+                        if rubro.lower() not in cats_by_name:
+                            try:
+                                new_cat = client.create_category(rubro)
+                                cat_id = (
+                                    new_cat.get("id")
+                                    or new_cat.get("_id")
+                                    or new_cat.get("categoryId")
+                                )
+                                if cat_id:
+                                    cats_by_name[rubro.lower()] = {"id": cat_id, "name": rubro}
+                                    st.toast(f"Categoría creada: {rubro}")
+                            except KyteAPIError as e:
+                                st.warning(f"No se pudo crear la categoría '{rubro}': {e}")
+
+                    # ── Crear productos ───────────────────────
                     prog_c = st.progress(0, text="Creando productos...")
                     n_created = 0
                     n_create_failed = 0
@@ -913,11 +948,17 @@ with tab_nomatch:
 
                     for i, (_, row) in enumerate(to_create.iterrows()):
                         nombre = str(row["Nombre"]).strip() if pd.notna(row["Nombre"]) and str(row["Nombre"]).strip() else str(row["Codigo"])
+                        rubro_val = str(row["Rubro"]).strip() if pd.notna(row["Rubro"]) and str(row["Rubro"]).strip() else ""
+                        cat = cats_by_name.get(rubro_val.lower()) if rubro_val else None
+                        cat_id = (cat.get("id") or cat.get("_id")) if cat else None
+                        cat_name = cat.get("name") if cat else None
                         try:
                             client.create_product(
                                 name=nombre,
                                 code=str(row["Codigo"]),
                                 sale_price=float(row["Precio Nuevo"]),
+                                category_id=cat_id,
+                                category_name=cat_name,
                             )
                             n_created += 1
                         except KyteAPIError as e:
