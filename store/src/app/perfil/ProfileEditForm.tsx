@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import type { Customer } from "@/lib/types";
 
@@ -24,6 +25,7 @@ export default function ProfileEditForm({
   initialPhone,
   customer,
 }: Props) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
 
   // Profile fields
@@ -89,6 +91,7 @@ export default function ProfileEditForm({
       } else {
         setSuccess(true);
         setEditing(false);
+        router.refresh();
       }
     } catch {
       setError("Error de red");

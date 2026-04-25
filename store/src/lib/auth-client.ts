@@ -41,6 +41,9 @@ export async function signUp(
 }
 
 export async function signOut() {
+  // Limpia cookies server-side via @supabase/ssr; el browser SDK por si solo
+  // no puede borrar cookies seteadas en el response del server.
+  await fetch("/api/auth/signout", { method: "POST", credentials: "include" });
   const { error } = await supabase.auth.signOut();
   return { error };
 }

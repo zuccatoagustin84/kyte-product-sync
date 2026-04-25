@@ -74,10 +74,10 @@ export async function POST(
 
   const supabase = createServiceClient();
 
-  // Verify the customer belongs to this company
+  // Leemos balance + verificamos tenant en una sola query
   const { data: customer } = await supabase
     .from("customers")
-    .select("id")
+    .select("id, balance")
     .eq("id", id)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -86,13 +86,21 @@ export async function POST(
     return Response.json({ error: "Cliente no encontrado" }, { status: 404 });
   }
 
+  // amount en customer_ledger es signed: + suma al saldo, - resta. El UI manda
+  // siempre positivo y delega el signo al entry_type.
+  const signedAmount =
+    body.entry_type === "credit_sub" ? -Math.abs(amount) : amount;
+  const currentBalance = Number(customer.balance ?? 0);
+  const balanceAfter = Math.round((currentBalance + signedAmount) * 100) / 100;
+
   const { data, error } = await supabase
     .from("customer_ledger")
     .insert({
       company_id: companyId,
       customer_id: id,
       entry_type: body.entry_type,
-      amount,
+      amount: signedAmount,
+      balance_after: balanceAfter,
       payment_method: body.payment_method ?? null,
       notes: body.notes ?? null,
       reference_type: body.reference_type ?? null,
