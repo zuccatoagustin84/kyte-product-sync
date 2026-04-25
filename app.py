@@ -31,6 +31,20 @@ from generate_catalog import build_categories, build_image_url
 from jinja2 import Environment, FileSystemLoader
 
 
+# ── Cuentas conocidas (AID -> (nombre, tipo)) ───────────────
+KNOWN_ACCOUNTS = {
+    "cPQI0AQmnlMpci": ("MP.TOOLS MAYORISTA", "prod"),
+    "2Bj9r4qNoYRd5J": ("Agustin Zuccato", "test"),
+}
+
+
+def _account_label(aid: str) -> tuple[str, str]:
+    """Devuelve (display_name, kind) donde kind ∈ {'prod','test','unknown'}."""
+    if aid in KNOWN_ACCOUNTS:
+        return KNOWN_ACCOUNTS[aid]
+    return (f"Desconocida (AID: {aid[:12]}…)", "unknown")
+
+
 def _token_seconds_left(token: str) -> int | None:
     """Segundos restantes hasta el vencimiento del kyte_token. None si no se puede parsear."""
     try:
@@ -270,6 +284,15 @@ except Exception as e:
 
 config = KyteConfig(uid=uid, aid=aid)
 client = KyteClient(config)
+
+# ── Banner: cuenta a la que estás conectado (primer lectura) ─
+_acc_name, _acc_kind = _account_label(aid)
+if _acc_kind == "prod":
+    st.success(f"🟢 Conectado a: **{_acc_name}** — PRODUCCIÓN  ·  AID `{aid}`")
+elif _acc_kind == "test":
+    st.warning(f"🧪 Conectado a: **{_acc_name}** — CUENTA DE TEST (no es producción)  ·  AID `{aid}`")
+else:
+    st.info(f"🔵 Conectado a: **{_acc_name}**  ·  AID `{aid}`  ·  UID `{uid[:12]}…`")
 
 
 # ── Helper functions ─────────────────────────────────────────
