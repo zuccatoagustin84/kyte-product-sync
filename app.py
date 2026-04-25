@@ -12,7 +12,7 @@ import json as _json
 import subprocess as _sp
 
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def _deploy_info() -> str:
     """Devuelve 'abc1234 · 2026-04-15 14:30' del último commit, o '' si falla."""
     try:
