@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { supabase } from "@/lib/supabase";
-import { useTenantId } from "@/components/TenantProvider";
+import { useTenant, useTenantId } from "@/components/TenantProvider";
 import { formatMoney, formatDate } from "@/lib/format";
 import type { Order, OrderItem, OrderPayment } from "@/lib/types";
 
@@ -22,6 +22,7 @@ export default function TicketPage({
 }) {
   const { id } = use(params);
   const tenantId = useTenantId();
+  const tenant = useTenant();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<OrderItem[]>([]);
@@ -145,7 +146,7 @@ export default function TicketPage({
         }
       `}</style>
 
-      <h1>MP.TOOLS MAYORISTA</h1>
+      <h1>{tenant?.name ?? "Tienda"}</h1>
       <p className="center muted">Comprobante de venta</p>
       <div className="dashed" />
 

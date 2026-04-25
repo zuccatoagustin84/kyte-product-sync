@@ -50,12 +50,19 @@ export async function GET(
   const { id } = await params;
   const supabase = createServiceClient();
 
-  const { data: order, error } = await supabase
-    .from("orders")
-    .select("*")
-    .eq("id", id)
-    .eq("company_id", companyId)
-    .single();
+  const [{ data: order, error }, { data: company }] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("*")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .single(),
+    supabase
+      .from("companies")
+      .select("name")
+      .eq("id", companyId)
+      .single(),
+  ]);
   if (error || !order) {
     return Response.json({ error: "Pedido no encontrado" }, { status: 404 });
   }
@@ -72,7 +79,7 @@ export async function GET(
     .eq("company_id", companyId);
 
   const lines: string[] = [];
-  lines.push("*MP.TOOLS MAYORISTA*");
+  lines.push(`*${company?.name ?? "Tienda"}*`);
   lines.push(`Comprobante N° ${order.order_number ?? "—"}`);
   lines.push(fmtDate(order.created_at));
   lines.push("");

@@ -184,6 +184,7 @@ export async function PUT(
       .from("product_images")
       .select("url")
       .eq("id", primary.id)
+      .eq("product_id", id)
       .eq("company_id", companyId)
       .single();
 
