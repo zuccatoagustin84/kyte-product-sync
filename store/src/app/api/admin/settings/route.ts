@@ -49,6 +49,15 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  if ("require_login_for_catalog" in body) {
+    await setAppSetting(
+      companyId,
+      "require_login_for_catalog",
+      Boolean(body.require_login_for_catalog),
+      auth.userId
+    );
+  }
+
   const settings = await getAppSettings(companyId);
   return Response.json({ settings, warnings });
 }

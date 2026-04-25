@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SignOutButton from "./SignOutButton";
 import ProfileEditForm from "./ProfileEditForm";
+import { BrandLogo } from "@/components/BrandLogo";
 import type { Customer, CustomerLedgerEntry } from "@/lib/types";
 
 interface Order {
@@ -99,15 +100,45 @@ export default async function PerfilPage() {
     .order("created_at", { ascending: false })
     .limit(20);
 
-  // Fetch customer linkeado + ledger (via service, bypass RLS)
+  // Fetch customer linkeado + ledger (via service, bypass RLS).
+  // Si no hay link directo por user_id, intentamos auto-linkear por email
+  // (caso típico: el customer fue creado primero en CRM y el cliente se
+  // registró después por su cuenta — tienen el mismo email pero el FK
+  // user_id quedó en null).
   const service = createServiceClient();
-  const { data: linkedCustomer } = await service
-    .from("customers")
-    .select("*")
-    .eq("company_id", companyId)
-    .eq("user_id", user.id)
-    .eq("active", true)
-    .maybeSingle<Customer>();
+  let linkedCustomer: Customer | null = null;
+
+  {
+    const { data } = await service
+      .from("customers")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("user_id", user.id)
+      .eq("active", true)
+      .maybeSingle<Customer>();
+    linkedCustomer = data ?? null;
+  }
+
+  if (!linkedCustomer && user.email) {
+    const { data: byEmail } = await service
+      .from("customers")
+      .select("*")
+      .eq("company_id", companyId)
+      .ilike("email", user.email)
+      .is("user_id", null)
+      .eq("active", true)
+      .maybeSingle<Customer>();
+
+    if (byEmail) {
+      const { data: updated } = await service
+        .from("customers")
+        .update({ user_id: user.id, updated_at: new Date().toISOString() })
+        .eq("id", byEmail.id)
+        .select("*")
+        .single<Customer>();
+      linkedCustomer = updated ?? byEmail;
+    }
+  }
 
   let ledger: CustomerLedgerEntry[] = [];
   if (linkedCustomer) {
@@ -136,15 +167,7 @@ export default async function PerfilPage() {
         className="sticky top-0 z-50 h-14 flex items-center px-4 shadow-md"
         style={{ backgroundColor: "var(--navy)" }}
       >
-        <span
-          className="text-lg font-extrabold tracking-wide"
-          style={{ color: "var(--brand)" }}
-        >
-          MP TOOLS
-        </span>
-        <span className="text-xs text-white/70 font-medium ml-1.5">
-          Mayorista
-        </span>
+        <BrandLogo variant="compact" />
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8 flex flex-col gap-6">
@@ -175,14 +198,28 @@ export default async function PerfilPage() {
           <Separator className="my-5" />
 
           <ProfileEditForm
-            userId={user.id}
             initialName={profile?.full_name ?? null}
             initialCompany={profile?.company ?? null}
             initialPhone={profile?.phone ?? null}
+            customer={linkedCustomer}
           />
         </section>
 
-        {/* Mi cuenta (saldo + ledger) — sólo si hay customer linkeado */}
+        {/* Mi cuenta (saldo + ledger) — sólo si hay customer linkeado.
+            Si el user es 'user' y no tiene customer, mostramos aviso. */}
+        {!linkedCustomer && profile?.role === "user" && (
+          <section className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-amber-900">
+              Tu cuenta corriente todavía no está activada
+            </h2>
+            <p className="text-sm text-amber-800 mt-1">
+              Para ver tu saldo y movimientos, pedile al administrador que vincule
+              tu usuario con tu ficha de cliente. Cuando lo haga, vas a poder
+              registrar pagos y comprar a crédito desde acá.
+            </p>
+          </section>
+        )}
+
         {linkedCustomer && (
           <section className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 p-6">
             <div className="flex items-center justify-between mb-4">

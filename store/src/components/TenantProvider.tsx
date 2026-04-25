@@ -8,10 +8,14 @@
 // y el caller debe manejar ese caso.
 
 import { createContext, useContext, type ReactNode } from "react";
+import type { Branding } from "@/lib/branding";
 
 export type TenantContextValue = {
   id: string;
   slug: string;
+  name?: string;
+  logo_url?: string | null;
+  branding?: Branding;
 } | null;
 
 const TenantContext = createContext<TenantContextValue>(null);

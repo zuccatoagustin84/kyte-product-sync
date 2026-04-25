@@ -4,7 +4,8 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toast";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { TenantProvider } from "@/components/TenantProvider";
-import { tryGetCurrentTenant } from "@/lib/tenant";
+import { tryGetCompanyPublic } from "@/lib/tenant";
+import { brandingToCss } from "@/lib/branding";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -27,18 +28,20 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Tenant resuelto por proxy.ts; null en /tenant-not-found.
-  const tenant = await tryGetCurrentTenant();
+  // Company resuelta por proxy.ts; null en /tenant-not-found.
+  const company = await tryGetCompanyPublic();
+  const brandingCss = company ? brandingToCss(company.branding) : null;
   return (
     <html
       lang="es"
       className={`${inter.variable} ${jakarta.variable} h-full antialiased`}
     >
       <head>
-        <meta name="theme-color" content="#1a1a2e" />
+        <meta name="theme-color" content={company?.branding.navy ?? "#1a1a2e"} />
+        {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
       </head>
       <body className="min-h-full">
-        <TenantProvider tenant={tenant}>
+        <TenantProvider tenant={company}>
           <AuthProvider>
             <div className="min-h-screen bg-[#f8f9fa]">{children}</div>
             <Toaster />
