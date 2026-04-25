@@ -51,20 +51,19 @@ calcular `balance_after = currentBalance + amount` antes del insert (mismo
 patrón que `payment/route.ts`). O agregar un BEFORE INSERT trigger en SQL que
 lo calcule.
 
-## 4. Fuera de scope — backlog
+## 4. Fuera de scope
 
 - **Factura AFIP**: requiere certificado WSAA + integración con webservice
-  fiscal. Decidir librería (typescript-afip o similar) y CUIT antes.
-- **Búsqueda por saldo en `/admin/clientes`**: falta filtro "solo deudores".
-  El KPI ya está, falta el filtro.
-- **Cambiar contraseña de operario desde admin**: el endpoint create soporta
-  password inicial, pero no hay flujo "resetear contraseña" desde la UI de
-  edición de usuario.
+  fiscal. Decidir librería (typescript-afip o similar) y CUIT antes. **No
+  hacer ahora.**
+
+## 5. Mejoras menores (opcionales)
+
 - **Cambio de branding sin reload**: actualmente al guardar el branding hay
   que refrescar para ver los cambios completos (los CSS vars vienen del SSR).
   Mejorable con un hot-reload del lado cliente.
 
-## 5. Resumen del último commit
+## 6. Resumen del último commit
 
 `f355a04 feat(store): admin features bundle — usuarios, branding, cuenta corriente, remito`
 
