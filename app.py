@@ -98,13 +98,14 @@ def _search_images_bing(query: str, num: int = 12) -> list[dict]:
     import re as _re
     r = _requests.get(
         "https://www.bing.com/images/search",
-        params={"q": query, "first": "1", "form": "HDRSC2"},
+        params={"q": query, "first": "1", "form": "HDRSC2", "mkt": "es-AR", "safesearch": "Moderate"},
         headers={"User-Agent": _BING_UA, "Accept-Language": "es-AR,es;q=0.9,en;q=0.8"},
         timeout=15,
     )
     if not r.ok:
         raise RuntimeError(f"Bing {r.status_code}: {r.text[:200]}")
-    raw_matches = _re.findall(r'class="iusc"[^>]*m="([^"]+)"', r.text)
+    # Solo <a class="iusc" ...> con atributo m="..." (resultados clickeables, evita carruseles "related")
+    raw_matches = _re.findall(r'<a\b[^>]*\bclass="iusc"[^>]*\bm="([^"]+)"', r.text)
     out: list[dict] = []
     seen: set[str] = set()
     for raw in raw_matches:
@@ -773,9 +774,13 @@ if page == "Imágenes":
         st.session_state._img_last_pid = pid
         st.session_state.pop("img_results", None)
         st.session_state.pop("img_picked", None)
+        st.session_state.pop("img_searched_query", None)
 
-    default_q = code or name[:40]
-    qc1, qc2 = st.columns([4, 1])
+    # Default: code + nombre (más certero que código solo para distribuidores)
+    _default_parts = [code, (name or "")[:60]]
+    default_q = " ".join(p for p in _default_parts if p).strip()
+
+    qc1, qc2, qc3 = st.columns([4, 1, 1])
     with qc1:
         query = st.text_input(
             "Término de búsqueda",
@@ -791,20 +796,37 @@ if page == "Imágenes":
             use_container_width=True,
             key="img_search_btn",
         )
+    with qc3:
+        st.write("")
+        if st.button("🗑 Limpiar", use_container_width=True, key="img_clear_btn"):
+            st.session_state.pop("img_results", None)
+            st.session_state.pop("img_picked", None)
+            st.session_state.pop("img_searched_query", None)
+            _search_images_bing.clear()
+            st.rerun()
 
     if do_search:
-        with st.spinner(f"Buscando '{query.strip()}'..."):
+        q_clean = query.strip()
+        with st.spinner(f"Buscando '{q_clean}'..."):
             try:
-                st.session_state.img_results = _search_images_bing(query.strip(), 12)
+                st.session_state.img_results = _search_images_bing(q_clean, 12)
+                st.session_state.img_searched_query = q_clean
                 st.session_state.pop("img_picked", None)
             except Exception as e:
                 st.error(str(e))
                 st.session_state.img_results = []
 
     results = st.session_state.get("img_results", [])
+    searched = st.session_state.get("img_searched_query", "")
 
     if results:
-        st.caption(f"{len(results)} resultados (clickeá una para elegir):")
+        # Avisar si el query del input ya no coincide con lo que se buscó
+        if searched and searched != query.strip():
+            st.warning(
+                f"⚠️ Estos son resultados de **{searched!r}**. Cambiaste el término — "
+                f"apretá **Buscar** para actualizar."
+            )
+        st.caption(f"{len(results)} resultados de '{searched}' (clickeá una para elegir):")
         cols = st.columns(5)
         for i, r in enumerate(results):
             with cols[i % 5]:
