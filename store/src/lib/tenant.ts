@@ -12,10 +12,22 @@
 
 import { headers } from "next/headers";
 import { createServiceClient } from "@/lib/supabase";
+import { coerceBranding, type Branding } from "@/lib/branding";
 
 export type Tenant = {
   id: string;
   slug: string;
+};
+
+// Datos de la company "públicos" (nombre, logo, branding) — los usa el
+// RootLayout para inyectar CSS vars y los Headers/Sidebars para mostrar
+// nombre y logo. Se cargan a partir del Tenant resuelto en proxy.
+export type CompanyPublic = {
+  id: string;
+  slug: string;
+  name: string;
+  logo_url: string | null;
+  branding: Branding;
 };
 
 export const TENANT_HEADER_ID = "x-tenant-id";
@@ -47,6 +59,29 @@ export async function tryGetCurrentTenant(): Promise<Tenant | null> {
   const slug = h.get(TENANT_HEADER_SLUG);
   if (!id || !slug) return null;
   return { id, slug };
+}
+
+// Carga datos públicos de la company (name, logo, branding) — usado por el
+// RootLayout para inyectar branding y por componentes que muestran la marca.
+// Devuelve null si no hay tenant resuelto.
+export async function tryGetCompanyPublic(): Promise<CompanyPublic | null> {
+  const t = await tryGetCurrentTenant();
+  if (!t) return null;
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("companies")
+    .select("id, slug, name, logo_url, settings")
+    .eq("id", t.id)
+    .maybeSingle();
+  if (!data) return null;
+  const settings = (data.settings ?? {}) as Record<string, unknown>;
+  return {
+    id: data.id as string,
+    slug: data.slug as string,
+    name: data.name as string,
+    logo_url: (data.logo_url as string | null) ?? null,
+    branding: coerceBranding(settings.branding),
+  };
 }
 
 // Resuelve company por host. Usado por proxy.ts y por flujos server-side

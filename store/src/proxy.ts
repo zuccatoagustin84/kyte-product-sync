@@ -15,6 +15,14 @@ import {
   resolveTenantFromHost,
 } from "@/lib/tenant";
 
+// Rutas públicas del catálogo gobernadas por require_login_for_catalog.
+// Sólo aplica al render de la storefront. /login, /registro, /api/* etc. siguen abiertos.
+function isCatalogPath(path: string): boolean {
+  if (path === "/") return true;
+  if (path.startsWith("/p/")) return true;
+  return false;
+}
+
 function buildSupabaseResponse(
   request: NextRequest,
   requestHeaders?: Headers
@@ -117,11 +125,43 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set(TENANT_HEADER_SLUG, tenant.slug);
 
   // ---------------------------------------------------------------------------
-  // 3) Auth gate (solo si hace falta — /admin, /perfil)
+  // 3) Auth gate
+  //    /admin y /perfil siempre requieren sesión.
+  //    Catálogo público (/, /p/*) requiere sesión sólo si la company tiene el
+  //    flag require_login_for_catalog activado.
   // ---------------------------------------------------------------------------
-  const needsAuthCheck =
+  const isAdminOrProfile =
     path.startsWith("/admin") || path.startsWith("/perfil");
-  if (!needsAuthCheck) {
+
+  if (!isAdminOrProfile && isCatalogPath(path)) {
+    // Lectura barata del flag — una sola key por request, no rompe TTFB.
+    const service = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_KEY!
+    );
+    const { data: setting } = await service
+      .from("app_settings")
+      .select("value")
+      .eq("company_id", tenant.id)
+      .eq("key", "require_login_for_catalog")
+      .maybeSingle();
+
+    const requireLogin = setting?.value === true;
+    if (requireLogin) {
+      const { supabase } = buildSupabaseResponse(request, requestHeaders);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.redirect(
+          new URL(`/login?next=${encodeURIComponent(path)}`, request.url)
+        );
+      }
+    }
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  if (!isAdminOrProfile) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 

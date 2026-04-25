@@ -10,11 +10,13 @@ import { createServiceClient } from "@/lib/supabase";
 export type AppSettings = {
   allow_public_signup: boolean;
   require_login_for_orders: boolean;
+  require_login_for_catalog: boolean;
 };
 
 const DEFAULTS: AppSettings = {
   allow_public_signup: true,
   require_login_for_orders: false,
+  require_login_for_catalog: false,
 };
 
 export async function getAppSettings(companyId: string): Promise<AppSettings> {

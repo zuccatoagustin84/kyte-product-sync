@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import PaymentAllocator from "./PaymentAllocator";
 
 type Mode = "create" | "edit" | "ledger" | "access";
 
@@ -580,8 +581,25 @@ export default function ClientesAdmin() {
                   </p>
                 </div>
 
+                <PaymentAllocator
+                  customerId={form.id}
+                  onSuccess={async () => {
+                    const refresh = await fetch(
+                      `/api/admin/customers/${form.id}`
+                    );
+                    const refreshBody = await refresh.json();
+                    if (refresh.ok) setForm(refreshBody.customer);
+                    const lres = await fetch(
+                      `/api/admin/customers/${form.id}/ledger`
+                    );
+                    const lbody = await lres.json();
+                    if (lres.ok) setLedger(lbody.entries ?? []);
+                    fetchCustomers();
+                  }}
+                />
+
                 <div className="border rounded-lg p-3 space-y-2">
-                  <h4 className="font-medium text-sm">Registrar movimiento</h4>
+                  <h4 className="font-medium text-sm">Otros movimientos</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setPayType("payment")}

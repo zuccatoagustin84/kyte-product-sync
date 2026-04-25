@@ -10,10 +10,12 @@ import {
   DollarSignIcon,
   ReceiptIcon,
   TrendingUpIcon,
+  PlusIcon,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import CreateUserSheet from "./CreateUserSheet";
 import {
   Sheet,
   SheetContent,
@@ -151,6 +153,7 @@ export default function UsuariosAdmin() {
   const [statsLoading, setStatsLoading] = useState(false);
 
   const [activeUserIds, setActiveUserIds] = useState<Set<string>>(new Set());
+  const [createOpen, setCreateOpen] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -304,11 +307,20 @@ export default function UsuariosAdmin() {
 
   return (
     <div className="p-6 md:p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Usuarios</h1>
-        <p className="text-gray-500 mt-1">
-          Gestión de roles, permisos granulares y comisiones
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Usuarios</h1>
+          <p className="text-gray-500 mt-1">
+            Gestión de roles, permisos granulares y comisiones
+          </p>
+        </div>
+        <Button
+          onClick={() => setCreateOpen(true)}
+          className="bg-orange-500 hover:bg-orange-600 text-white border-0"
+        >
+          <PlusIcon size={16} />
+          Nuevo usuario
+        </Button>
       </div>
 
       {error && (
@@ -430,6 +442,13 @@ export default function UsuariosAdmin() {
           </table>
         </div>
       </div>
+
+      {/* Create sheet */}
+      <CreateUserSheet
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={fetchUsers}
+      />
 
       {/* Editor sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

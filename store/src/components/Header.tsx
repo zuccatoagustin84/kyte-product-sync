@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CartButton } from "@/components/cart/CartButton";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { BrandLogo } from "@/components/BrandLogo";
 
 function UserMenu() {
   const { user, profile, signOut } = useAuth();
@@ -109,18 +110,7 @@ export function Header() {
     >
       <div className="flex items-center gap-3">
         <Link href="/" className="flex items-center gap-2.5">
-          <span
-            className="text-xl font-black tracking-tight"
-            style={{ color: "var(--brand)" }}
-          >
-            MP TOOLS
-          </span>
-          <span
-            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-white"
-            style={{ backgroundColor: "var(--brand)" }}
-          >
-            Mayorista
-          </span>
+          <BrandLogo />
         </Link>
       </div>
 

@@ -1046,6 +1046,18 @@ function SuccessModal({
             </div>
           </a>
           <a
+            href={`/api/admin/orders/${result.id}/receipt/remito`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+          >
+            <FileTextIcon size={20} className="text-amber-600" />
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium text-gray-900">Remito (sin precios)</p>
+              <p className="text-xs text-gray-500">Para acompañar la mercadería</p>
+            </div>
+          </a>
+          <a
             href={`/admin/vender/ticket/${result.id}`}
             target="_blank"
             rel="noopener noreferrer"

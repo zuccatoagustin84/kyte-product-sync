@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SettingsIcon } from "lucide-react";
+import Link from "next/link";
+import { SettingsIcon, PaletteIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Settings = {
   allow_public_signup: boolean;
   require_login_for_orders: boolean;
+  require_login_for_catalog: boolean;
 };
 
 export default function ConfiguracionPage() {
@@ -82,6 +84,21 @@ export default function ConfiguracionPage() {
         </div>
       ) : (
         <div className="space-y-3">
+          <Link
+            href="/admin/configuracion/branding"
+            className="block bg-white rounded-xl ring-1 ring-foreground/10 p-5 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <PaletteIcon size={20} className="text-orange-500" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-gray-900">Branding</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Logo, paleta de colores y estilo de bordes
+                </p>
+              </div>
+              <ChevronRightIcon size={18} className="text-gray-400" />
+            </div>
+          </Link>
           <ToggleRow
             title="Registro público abierto"
             description="Si está apagado, la página /registro queda bloqueada y sólo se puede crear usuarios desde el panel admin. Además, Supabase rechaza signups directos."
@@ -99,6 +116,15 @@ export default function ConfiguracionPage() {
             onChange={(v) => toggle("require_login_for_orders", v)}
             onLabel="Hace falta iniciar sesión"
             offLabel="Checkout abierto como invitado"
+          />
+          <ToggleRow
+            title="Catálogo privado"
+            description="Si está encendido, sólo los usuarios logueados pueden ver el catálogo. Las páginas públicas redirigen al login."
+            checked={settings.require_login_for_catalog}
+            saving={saving === "require_login_for_catalog"}
+            onChange={(v) => toggle("require_login_for_catalog", v)}
+            onLabel="Catálogo privado, sólo logueados"
+            offLabel="Catálogo público, abierto a todos"
           />
         </div>
       )}

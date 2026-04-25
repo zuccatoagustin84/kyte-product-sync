@@ -1196,6 +1196,14 @@ export default function PedidosAdmin() {
                 >
                   <FileText size={14} /> Recibo PDF
                 </a>
+                <a
+                  href={`/api/admin/orders/${selected.id}/receipt/remito`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-sm hover:border-gray-300 hover:bg-gray-50"
+                >
+                  <FileText size={14} /> Remito (sin precios)
+                </a>
                 <Link
                   href={`/admin/vender/ticket/${selected.id}`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-sm hover:border-gray-300 hover:bg-gray-50"

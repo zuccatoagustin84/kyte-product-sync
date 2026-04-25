@@ -24,6 +24,7 @@ import type { LucideIcon } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import type { Role } from "@/lib/rbac";
 import { hasPermission } from "@/lib/rbac";
+import { BrandLogo } from "@/components/BrandLogo";
 
 type NavItem = {
   href: string;
@@ -94,9 +95,8 @@ export function AdminSidebar() {
     <>
       {/* Logo */}
       <div className="px-6 py-5 border-b border-white/10">
-        <span className="text-white font-bold text-lg tracking-tight">
-          MP TOOLS Admin
-        </span>
+        <BrandLogo variant="sidebar" />
+        <span className="ml-2 text-xs text-white/50 font-medium">Admin</span>
         {role && (
           <span
             className={`mt-1.5 ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ROLE_COLORS[role]}`}
