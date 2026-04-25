@@ -834,170 +834,187 @@ with tab_update:
         st.info("No hay precios para actualizar. Todo esta al dia.")
 
 with tab_nomatch:
-    st.caption("Productos del Excel que no están en Kyte (o sin código).")
-    df_nm = report_df[report_df["Estado"].isin(["SIN MATCH", "SIN CODIGO", "PRECIO 0"])].reset_index(drop=True)
-    if len(df_nm):
-        f_nm = st.text_input(
-            "Filtrar por código o nombre",
-            key="filtro_nomatch",
-            placeholder="ej: MRC050590 ó amoladora",
-        ).strip().lower()
-        if f_nm:
-            mask = (
-                df_nm["Codigo"].astype(str).str.lower().str.contains(f_nm, na=False)
-                | df_nm["Nombre"].astype(str).str.lower().str.contains(f_nm, na=False)
-            )
-            df_nm = df_nm[mask].reset_index(drop=True)
-        st.dataframe(df_nm, use_container_width=True, hide_index=True)
-        st.caption(f"{len(df_nm)} filas")
-    else:
-        st.success("Todos los productos de la lista matchearon con Kyte.")
+    # Info sobre productos no importables (sin código o precio 0)
+    _n_sin_cod = len(report_df[report_df["Estado"] == "SIN CODIGO"])
+    _n_precio0 = len(report_df[report_df["Estado"] == "PRECIO 0"])
+    _captions = []
+    if _n_sin_cod:
+        _captions.append(f"{_n_sin_cod} sin código (no se pueden importar)")
+    if _n_precio0:
+        _captions.append(f"{_n_precio0} con precio $0 (ignorados)")
+    if _captions:
+        st.caption("⚠️ " + " · ".join(_captions))
 
-    # ── Crear productos nuevos en Kyte ────────────────────────
+    # Productos SIN MATCH con código y precio válido → candidatos a crear
     df_create = report_df[
         (report_df["Estado"] == "SIN MATCH")
         & (report_df["Codigo"].astype(str).str.strip() != "")
         & (report_df["Precio Nuevo"].apply(lambda x: pd.to_numeric(x, errors="coerce")).fillna(0) > 0)
     ].reset_index(drop=True)
 
-    if len(df_create):
-        st.divider()
+    if len(df_create) == 0:
+        st.success("Todos los productos del Excel matchearon con Kyte.")
+    else:
         st.subheader("Crear productos nuevos en Kyte")
 
-        # ── Verificar categorías existentes en Kyte ───────────
-        with st.spinner("Verificando categorías en Kyte..."):
+        # Categorías de Kyte (cacheadas)
+        with st.spinner("Cargando categorías de Kyte..."):
             try:
                 kyte_cats = _fetch_kyte_categories_cached(uid, aid, token)
-                cats_by_name = {c.get("name", "").strip().lower(): c for c in kyte_cats if c.get("name")}
             except KyteAPIError as e:
                 st.error(f"Error obteniendo categorías de Kyte: {e}")
                 st.stop()
 
-        def _rubro_existe(rubro):
-            r = str(rubro).strip() if pd.notna(rubro) else ""
-            return not r or r.lower() in cats_by_name
+        cat_names_sorted = sorted([c.get("name", "").strip() for c in kyte_cats if c.get("name")])
+        cats_by_lower = {c.get("name", "").strip().lower(): c for c in kyte_cats if c.get("name")}
+        cats_by_original = {c.get("name", "").strip(): c for c in kyte_cats if c.get("name")}
 
-        df_create = df_create.copy()
-        df_ok = df_create[df_create["Rubro"].apply(_rubro_existe)].reset_index(drop=True)
-        df_bloqueados = df_create[~df_create["Rubro"].apply(_rubro_existe)].reset_index(drop=True)
+        # Estado persistente: set de seleccionados + overrides de categoría por código
+        _csk = f"csk_{hash(frozenset(df_create['Codigo'].astype(str)))}"
+        if st.session_state.get("_csk") != _csk:
+            st.session_state._csk = _csk
+            st.session_state._create_sel = set()
+            st.session_state._cat_overrides = {}
 
-        if len(df_bloqueados):
-            rubros_faltantes = sorted({
-                str(r).strip() for r in df_bloqueados["Rubro"] if pd.notna(r) and str(r).strip()
-            })
-            st.warning(
-                f"**{len(df_bloqueados)} productos bloqueados** — su categoría no existe en Kyte. "
-                f"Creá estas categorías en Kyte antes de importarlos: "
-                f"**{', '.join(rubros_faltantes)}**"
-            )
-            with st.expander(f"Ver {len(df_bloqueados)} productos bloqueados"):
-                st.dataframe(
-                    df_bloqueados[["Codigo", "Nombre", "Precio Nuevo", "Rubro"]].rename(
-                        columns={"Nombre": "Descripcion", "Precio Nuevo": "Precio", "Rubro": "Categoria"}
-                    ),
-                    use_container_width=True, hide_index=True,
-                )
+        # Construir DF para el editor
+        rows_cv = []
+        for _, row in df_create.iterrows():
+            code_lc = str(row["Codigo"]).strip().lower()
+            rubro = str(row["Rubro"]).strip() if pd.notna(row["Rubro"]) and str(row["Rubro"]).strip() not in ("", "nan") else ""
 
-        if len(df_ok) == 0:
-            st.info("Ningún producto disponible (todos tienen categorías que no existen en Kyte).")
-        else:
-            st.caption(f"{len(df_ok)} productos disponibles para importar.")
-
-            # Filtro
-            f_create = st.text_input(
-                "Filtrar por código o descripción",
-                key="filtro_crear",
-                placeholder="ej: TEST-001 ó taladro",
-            ).strip().lower()
-
-            # Set persistente de selección
-            _csk = f"csk_{hash(frozenset(df_ok['Codigo'].astype(str)))}"
-            if st.session_state.get("_csk") != _csk:
-                st.session_state._csk = _csk
-                st.session_state._create_sel = set()
-
-            df_cv = df_ok[["Codigo", "Nombre", "Precio Nuevo", "Rubro"]].copy()
-            df_cv = df_cv.rename(columns={"Nombre": "Descripcion", "Precio Nuevo": "Precio", "Rubro": "Categoria"})
-
-            if f_create:
-                mask = (
-                    df_cv["Codigo"].astype(str).str.lower().str.contains(f_create, na=False)
-                    | df_cv["Descripcion"].astype(str).str.lower().str.contains(f_create, na=False)
-                )
-                df_cv_view = df_cv[mask].reset_index(drop=True)
+            # Cat Kyte: override manual > auto-match por Rubro > None
+            if code_lc in st.session_state._cat_overrides:
+                cat_kyte = st.session_state._cat_overrides[code_lc]
+            elif rubro and rubro.lower() in cats_by_lower:
+                cat_kyte = cats_by_lower[rubro.lower()].get("name", "").strip()
             else:
-                df_cv_view = df_cv.copy()
+                cat_kyte = None
 
-            df_cv_view.insert(0, "Crear", df_cv_view["Codigo"].astype(str).str.lower().isin(st.session_state._create_sel))
+            rows_cv.append({
+                "Crear": code_lc in st.session_state._create_sel,
+                "Codigo": str(row["Codigo"]).strip(),
+                "Descripcion": str(row["Nombre"]).strip() if pd.notna(row["Nombre"]) else "",
+                "Precio": float(row["Precio Nuevo"]),
+                "Rubro": rubro,
+                "Cat Kyte": cat_kyte,
+            })
 
-            cca, ccb, _ = st.columns([1, 1, 4])
-            if cca.button("✓ Todos", key="create_sel_all"):
-                st.session_state._create_sel = set(df_ok["Codigo"].astype(str).str.lower())
-                st.session_state.pop("editor_create", None)
-                st.rerun()
-            if ccb.button("✗ Ninguno", key="create_sel_none"):
-                st.session_state._create_sel = set()
-                st.session_state.pop("editor_create", None)
-                st.rerun()
+        df_cv = pd.DataFrame(rows_cv)
 
-            edited_create = st.data_editor(
-                df_cv_view,
-                use_container_width=True,
-                hide_index=True,
-                disabled=[c for c in df_cv_view.columns if c != "Crear"],
-                column_config={"Crear": st.column_config.CheckboxColumn("Crear")},
-                key="editor_create",
+        # Filtro
+        f_create = st.text_input(
+            "Filtrar por código o descripción",
+            key="filtro_crear",
+            placeholder="ej: WWC1209 ó taladro",
+        ).strip().lower()
+
+        df_cv_view = df_cv.copy()
+        if f_create:
+            mask = (
+                df_cv_view["Codigo"].str.lower().str.contains(f_create, na=False)
+                | df_cv_view["Descripcion"].str.lower().str.contains(f_create, na=False)
             )
+            df_cv_view = df_cv_view[mask].reset_index(drop=True)
 
-            for _, r in edited_create.iterrows():
-                _c = str(r["Codigo"]).lower()
-                if r["Crear"]:
-                    st.session_state._create_sel.add(_c)
-                else:
-                    st.session_state._create_sel.discard(_c)
+        # Botones Todos / Ninguno
+        cca, ccb, _ = st.columns([1, 1, 4])
+        if cca.button("✓ Todos", key="create_sel_all"):
+            st.session_state._create_sel = set(df_cv["Codigo"].str.lower())
+            st.session_state.pop("editor_create", None)
+            st.rerun()
+        if ccb.button("✗ Ninguno", key="create_sel_none"):
+            st.session_state._create_sel = set()
+            st.session_state.pop("editor_create", None)
+            st.rerun()
 
-            n_to_create = len(st.session_state._create_sel)
-            st.caption(f"{n_to_create} seleccionados · {len(df_cv_view)} visibles · {len(df_ok)} disponibles")
+        edited_create = st.data_editor(
+            df_cv_view,
+            use_container_width=True,
+            hide_index=True,
+            disabled=["Codigo", "Descripcion", "Precio", "Rubro"],
+            column_config={
+                "Crear": st.column_config.CheckboxColumn("Crear"),
+                "Cat Kyte": st.column_config.SelectboxColumn(
+                    "Categoría Kyte",
+                    options=cat_names_sorted,
+                    required=False,
+                    help="Pre-llenado si el Rubro coincide. Si no existe, elegí la categoría más cercana.",
+                ),
+                "Precio": st.column_config.NumberColumn("Precio", format="$%.2f"),
+            },
+            key="editor_create",
+        )
 
-            if n_to_create > 0:
-                confirm_create = st.checkbox(f"Confirmo que quiero crear {n_to_create} productos nuevos en Kyte", key="confirm_create")
-                if confirm_create:
-                    if st.button(f"CREAR {n_to_create} PRODUCTOS", type="primary", key="btn_create_products"):
-                        to_create = df_ok[df_ok["Codigo"].astype(str).str.lower().isin(st.session_state._create_sel)]
-                        prog_c = st.progress(0, text="Creando productos...")
-                        n_created = 0
-                        n_create_failed = 0
-                        create_errors = []
+        # Persistir selección y overrides de categoría
+        for _, r in edited_create.iterrows():
+            code_lc = str(r["Codigo"]).lower()
+            if r["Crear"]:
+                st.session_state._create_sel.add(code_lc)
+            else:
+                st.session_state._create_sel.discard(code_lc)
+            cat_val = r.get("Cat Kyte")
+            if pd.notna(cat_val) and str(cat_val).strip() and str(cat_val) != "nan":
+                st.session_state._cat_overrides[code_lc] = str(cat_val).strip()
+            else:
+                st.session_state._cat_overrides.pop(code_lc, None)
 
-                        for i, (_, row) in enumerate(to_create.iterrows()):
-                            nombre = str(row["Nombre"]).strip() if pd.notna(row["Nombre"]) and str(row["Nombre"]).strip() else str(row["Codigo"])
-                            rubro_val = str(row["Rubro"]).strip() if pd.notna(row["Rubro"]) and str(row["Rubro"]).strip() else ""
-                            cat = cats_by_name.get(rubro_val.lower()) if rubro_val else None
-                            cat_id = (cat.get("id") or cat.get("_id")) if cat else None
-                            cat_name = cat.get("name") if cat else None
-                            try:
-                                client.create_product(
-                                    name=nombre,
-                                    code=str(row["Codigo"]),
-                                    sale_price=float(row["Precio Nuevo"]),
-                                    category_id=cat_id,
-                                    category_name=cat_name,
-                                )
-                                n_created += 1
-                            except KyteAPIError as e:
-                                n_create_failed += 1
-                                create_errors.append(f"{nombre} ({row['Codigo']}): {e}")
-                            prog_c.progress((i + 1) / len(to_create), text=f"Creando {i+1}/{len(to_create)}...")
+        n_to_create = len(st.session_state._create_sel)
+        st.caption(f"{n_to_create} seleccionados · {len(df_cv_view)} visibles · {len(df_cv)} disponibles")
 
-                        prog_c.empty()
-                        if n_create_failed == 0:
-                            st.success(f"{n_created} productos creados correctamente en Kyte.")
-                            _fetch_kyte_products_cached.clear()
-                            _fetch_kyte_categories_cached.clear()
+        if n_to_create > 0:
+            confirm_create = st.checkbox(
+                f"Confirmo que quiero crear {n_to_create} productos nuevos en Kyte",
+                key="confirm_create",
+            )
+            if confirm_create:
+                if st.button(f"CREAR {n_to_create} PRODUCTOS", type="primary", key="btn_create_products"):
+                    to_create = df_create[df_create["Codigo"].astype(str).str.lower().isin(st.session_state._create_sel)]
+                    prog_c = st.progress(0, text="Creando productos...")
+                    n_created = 0
+                    n_create_failed = 0
+                    create_errors = []
+
+                    for i, (_, row) in enumerate(to_create.iterrows()):
+                        code_lc = str(row["Codigo"]).strip().lower()
+                        nombre = str(row["Nombre"]).strip() if pd.notna(row["Nombre"]) and str(row["Nombre"]).strip() not in ("", "nan") else str(row["Codigo"])
+                        rubro = str(row["Rubro"]).strip() if pd.notna(row["Rubro"]) and str(row["Rubro"]).strip() not in ("", "nan") else ""
+
+                        override_cat = st.session_state._cat_overrides.get(code_lc)
+                        if override_cat:
+                            cat_obj = cats_by_original.get(override_cat)
+                        elif rubro and rubro.lower() in cats_by_lower:
+                            cat_obj = cats_by_lower[rubro.lower()]
                         else:
-                            st.warning(f"{n_created} creados, {n_create_failed} fallaron.")
-                            for err in create_errors:
-                                st.error(err)
+                            cat_obj = None
+
+                        cat_id = (cat_obj.get("id") or cat_obj.get("_id")) if cat_obj else None
+                        cat_name_str = cat_obj.get("name") if cat_obj else None
+
+                        try:
+                            client.create_product(
+                                name=nombre,
+                                code=str(row["Codigo"]).strip(),
+                                sale_price=float(row["Precio Nuevo"]),
+                                category_id=cat_id,
+                                category_name=cat_name_str,
+                            )
+                            n_created += 1
+                        except KyteAPIError as e:
+                            n_create_failed += 1
+                            create_errors.append(f"{nombre} ({row['Codigo']}): {e}")
+                        prog_c.progress((i + 1) / len(to_create), text=f"Creando {i+1}/{len(to_create)}...")
+
+                    prog_c.empty()
+                    if n_create_failed == 0:
+                        st.success(f"{n_created} productos creados correctamente en Kyte.")
+                        _fetch_kyte_products_cached.clear()
+                        _fetch_kyte_categories_cached.clear()
+                        st.session_state._create_sel = set()
+                        st.session_state._cat_overrides = {}
+                    else:
+                        st.warning(f"{n_created} creados, {n_create_failed} fallaron.")
+                        for err in create_errors:
+                            st.error(err)
 
 with tab_kyte_only:
     st.caption("Productos cargados en Kyte que no aparecen en el Excel del distribuidor.")
