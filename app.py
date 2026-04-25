@@ -11,6 +11,8 @@ import base64 as _b64
 import json as _json
 import subprocess as _sp
 
+import requests as _requests
+
 
 @st.cache_data(ttl=300)
 def _deploy_info() -> str:
@@ -80,6 +82,53 @@ def _format_remaining(seconds: int) -> str:
         m = (seconds % 3600) // 60
         return f"{h}h {m}m" if m else f"{h}h"
     return f"{seconds // 86400} días"
+_BING_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _search_images_bing(query: str, num: int = 12) -> list[dict]:
+    """
+    Busca imágenes scrapeando Bing Images (sin API key).
+    Cada resultado en HTML lleva un atributo m="<JSON>" con murl/turl/t/purl.
+    """
+    import html as _html
+    import re as _re
+    r = _requests.get(
+        "https://www.bing.com/images/search",
+        params={"q": query, "first": "1", "form": "HDRSC2"},
+        headers={"User-Agent": _BING_UA, "Accept-Language": "es-AR,es;q=0.9,en;q=0.8"},
+        timeout=15,
+    )
+    if not r.ok:
+        raise RuntimeError(f"Bing {r.status_code}: {r.text[:200]}")
+    raw_matches = _re.findall(r'class="iusc"[^>]*m="([^"]+)"', r.text)
+    out: list[dict] = []
+    seen: set[str] = set()
+    for raw in raw_matches:
+        try:
+            d = _json.loads(_html.unescape(raw))
+        except Exception:
+            continue
+        url = d.get("murl") or ""
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        out.append({
+            "url": url,
+            "thumb": d.get("turl") or url,
+            "title": d.get("t") or "",
+            "context": d.get("purl"),
+            "width": None,
+            "height": None,
+        })
+        if len(out) >= num:
+            break
+    return out
+
+
 try:
     from streamlit_javascript import st_javascript
     HAS_JS = True
@@ -224,7 +273,7 @@ if st.sidebar.button("🔄 Renovar token ahora", disabled=not _has_rt, help="Fue
         st.sidebar.error(f"Error renovando: {e}")
 
 st.sidebar.divider()
-page = st.sidebar.radio("Modo", ["Sincronizar Precios", "Catalogo de Productos"])
+page = st.sidebar.radio("Modo", ["Sincronizar Precios", "Catalogo de Productos", "Imágenes"])
 
 if not token:
     st.info("Pega tu token de Kyte en la barra lateral para comenzar.")
@@ -615,6 +664,177 @@ if page == "Catalogo de Productos":
             )
 
     st.stop()
+
+# ════════════════════════════════════════════════════════════
+# IMAGENES
+# ════════════════════════════════════════════════════════════
+if page == "Imágenes":
+    st.subheader("Buscar imágenes para productos")
+    st.caption("Busca en Bing Images a partir del código del producto.")
+
+    # Carga de productos (lazy, persistida en session_state)
+    if "imgmode_products" not in st.session_state:
+        if st.button("Cargar productos de Kyte", type="primary"):
+            with st.spinner("Descargando productos..."):
+                try:
+                    st.session_state.imgmode_products = client.get_products()
+                    st.rerun()
+                except KyteAPIError as e:
+                    st.error(f"Error de API: {e}")
+                    st.stop()
+        st.stop()
+
+    products = st.session_state.imgmode_products
+
+    def _has_image(p):
+        return bool((p.get("image") or "").strip())
+
+    n_total = len(products)
+    n_missing = sum(1 for p in products if not _has_image(p))
+
+    fc1, fc2, fc3 = st.columns([1, 2, 1])
+    with fc1:
+        only_missing = st.checkbox("Solo sin imagen", value=True, key="img_only_missing")
+    with fc2:
+        filt = st.text_input(
+            "Filtrar",
+            key="img_filter",
+            placeholder="código o nombre",
+            label_visibility="collapsed",
+        ).strip().lower()
+    with fc3:
+        if st.button("↺ Recargar productos", key="img_reload"):
+            del st.session_state.imgmode_products
+            st.session_state.pop("img_results", None)
+            st.session_state.pop("img_picked", None)
+            st.rerun()
+
+    filtered = [
+        p for p in products
+        if (not only_missing or not _has_image(p))
+        and (
+            not filt
+            or filt in (p.get("code") or "").lower()
+            or filt in (p.get("name") or "").lower()
+        )
+    ]
+
+    st.caption(f"{len(filtered)} productos visibles · {n_missing}/{n_total} sin imagen en total")
+
+    if not filtered:
+        st.info("No hay productos para mostrar con esos filtros.")
+        st.stop()
+
+    LIMIT = 500
+    show = filtered[:LIMIT]
+    if len(filtered) > LIMIT:
+        st.caption(f"⚠️ Mostrando primeros {LIMIT}. Refiná el filtro para ver más.")
+
+    def _label(i: int) -> str:
+        p = show[i]
+        c = p.get("code") or "(sin código)"
+        n = p.get("name") or "(sin nombre)"
+        return f"{c} — {n[:60]}"
+
+    idx = st.selectbox(
+        "Producto",
+        list(range(len(show))),
+        format_func=_label,
+        key="img_product_select",
+    )
+    selected = show[idx]
+
+    code = (selected.get("code") or "").strip()
+    name = (selected.get("name") or "").strip()
+    cur_img_raw = selected.get("image") or ""
+    pid = selected.get("id") or selected.get("_id") or f"{code}__{name}"
+
+    # Card del producto seleccionado
+    with st.container(border=True):
+        pc1, pc2 = st.columns([1, 5])
+        with pc1:
+            if cur_img_raw:
+                _url = build_image_url(cur_img_raw, uid)
+                if _url:
+                    st.image(_url, width=110)
+                else:
+                    st.caption("(sin preview)")
+            else:
+                st.caption("Sin imagen")
+        with pc2:
+            st.markdown(f"**{name or '(sin nombre)'}**")
+            if code:
+                st.caption(f"Código: `{code}`")
+
+    st.divider()
+
+    # Reset estado al cambiar de producto
+    if st.session_state.get("_img_last_pid") != pid:
+        st.session_state._img_last_pid = pid
+        st.session_state.pop("img_results", None)
+        st.session_state.pop("img_picked", None)
+
+    default_q = code or name[:40]
+    qc1, qc2 = st.columns([4, 1])
+    with qc1:
+        query = st.text_input(
+            "Término de búsqueda",
+            value=default_q,
+            key=f"img_query_{pid}",
+        )
+    with qc2:
+        st.write("")
+        do_search = st.button(
+            "🔍 Buscar",
+            type="primary",
+            disabled=not query.strip(),
+            use_container_width=True,
+            key="img_search_btn",
+        )
+
+    if do_search:
+        with st.spinner(f"Buscando '{query.strip()}'..."):
+            try:
+                st.session_state.img_results = _search_images_bing(query.strip(), 12)
+                st.session_state.pop("img_picked", None)
+            except Exception as e:
+                st.error(str(e))
+                st.session_state.img_results = []
+
+    results = st.session_state.get("img_results", [])
+
+    if results:
+        st.caption(f"{len(results)} resultados (clickeá una para elegir):")
+        cols = st.columns(5)
+        for i, r in enumerate(results):
+            with cols[i % 5]:
+                with st.container(border=True):
+                    try:
+                        st.image(r["thumb"], use_container_width=True)
+                    except Exception:
+                        st.caption("(sin preview)")
+                    if r.get("width") and r.get("height"):
+                        st.caption(f"{r['width']}×{r['height']}")
+                    if st.button("Elegir", key=f"img_pick_{i}", use_container_width=True):
+                        st.session_state.img_picked = r["url"]
+                        st.rerun()
+
+        picked = st.session_state.get("img_picked")
+        if picked:
+            st.divider()
+            st.markdown("**Imagen elegida:**")
+            st.image(picked, width=200)
+            st.code(picked, language=None)
+            cb1, cb2, _ = st.columns([1, 1, 3])
+            with cb1:
+                st.link_button("🔗 Abrir", picked, use_container_width=True)
+            st.caption(
+                "Para subirla al producto: clic derecho en la imagen → guardar imagen → "
+                "subila desde Kyte web editando el producto. (Subida automática a Kyte: pendiente)"
+            )
+
+    st.stop()
+
 
 # ════════════════════════════════════════════════════════════
 # SINCRONIZAR PRECIOS
