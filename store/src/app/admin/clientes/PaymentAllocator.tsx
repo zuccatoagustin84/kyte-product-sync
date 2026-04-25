@@ -9,6 +9,7 @@ import { CheckIcon, RefreshCwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatMoney, formatDate } from "@/lib/format";
+import { allocateFIFO } from "@/lib/payment-utils";
 
 type PendingOrder = {
   id: string;
@@ -63,21 +64,11 @@ export default function PaymentAllocator({ customerId, onSuccess }: Props) {
   const amountNum = Number(amount) || 0;
   const remaining = amountNum - allocatedSum;
 
-  // Distribución FIFO: agarra del monto disponible y cubre las órdenes más
-  // viejas hasta agotar.
   function fillFIFO() {
-    if (amountNum <= 0) return;
-    let left = amountNum;
+    const allocs = allocateFIFO(orders, amountNum);
     const next: Record<string, string> = {};
-    for (const o of orders) {
-      if (left <= 0) {
-        next[o.id] = "";
-        continue;
-      }
-      const take = Math.min(o.pending, left);
-      next[o.id] = take > 0 ? take.toFixed(2) : "";
-      left -= take;
-    }
+    for (const o of orders) next[o.id] = "";
+    for (const a of allocs) next[a.order_id] = a.amount.toFixed(2);
     setAllocations(next);
   }
 

@@ -20,6 +20,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { getCurrentTenant } from "@/lib/tenant";
+import { computePaymentStatus } from "@/lib/payment-utils";
 
 type Body = {
   amount: number;
@@ -151,8 +152,7 @@ export async function POST(
       .eq("company_id", companyId)
       .single();
     const total = Number(orderRow?.total ?? 0);
-    const newStatus =
-      paid + 0.005 >= total ? "paid" : paid > 0 ? "partial" : "pending";
+    const newStatus = computePaymentStatus(paid, total);
 
     await supabase
       .from("orders")
