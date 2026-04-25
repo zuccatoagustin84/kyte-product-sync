@@ -338,12 +338,12 @@ def run_matching(kyte_products, source_df, code_col, price_col, name_col=None, r
             src_code = normalize(src_row[code_col])
 
         if not src_code:
-            rows.append({"Estado": "SIN CODIGO", "Nombre": src_name, "Codigo": "", "Precio Kyte": "", "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": "", "Rubro": src_rubro})
+            rows.append({"Estado": "SIN CODIGO", "Nombre": src_name, "Codigo": "", "Precio Kyte": None, "Precio Nuevo": new_price, "Diferencia": None, "Dif %": "", "Categoria": "", "Rubro": src_rubro})
             continue
 
         matched = kyte_by_code.get(src_code)
         if not matched:
-            rows.append({"Estado": "SIN MATCH", "Nombre": src_name, "Codigo": src_code, "Precio Kyte": "", "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": "", "Rubro": src_rubro})
+            rows.append({"Estado": "SIN MATCH", "Nombre": src_name, "Codigo": src_code, "Precio Kyte": None, "Precio Nuevo": new_price, "Diferencia": None, "Dif %": "", "Categoria": "", "Rubro": src_rubro})
             continue
 
         old_price = matched.get("salePrice", 0)
@@ -351,7 +351,7 @@ def run_matching(kyte_products, source_df, code_col, price_col, name_col=None, r
         cat_name = cat.get("name", "") if isinstance(cat, dict) else ""
 
         if new_price <= 0:
-            rows.append({"Estado": "PRECIO 0", "Nombre": matched.get("name", ""), "Codigo": src_code, "Precio Kyte": old_price, "Precio Nuevo": new_price, "Diferencia": "", "Dif %": "", "Categoria": cat_name, "Rubro": src_rubro})
+            rows.append({"Estado": "PRECIO 0", "Nombre": matched.get("name", ""), "Codigo": src_code, "Precio Kyte": old_price, "Precio Nuevo": new_price, "Diferencia": None, "Dif %": "", "Categoria": cat_name, "Rubro": src_rubro})
             continue
 
         diff = round(new_price - old_price, 2)
