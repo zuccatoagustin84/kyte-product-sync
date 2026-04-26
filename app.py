@@ -960,10 +960,27 @@ if page == "Imágenes":
                 else:
                     try:
                         with st.spinner("Descargando imagen..."):
-                            _r = _requests.get(picked, timeout=20, headers={
-                                "User-Agent": "Mozilla/5.0",
-                                "Accept": "image/*,*/*;q=0.8",
-                            })
+                            from urllib.parse import urlparse as _urlparse
+                            _u = _urlparse(picked)
+                            _origin = f"{_u.scheme}://{_u.netloc}"
+                            _hdrs_browser = {
+                                "User-Agent": (
+                                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                    "Chrome/131.0.0.0 Safari/537.36"
+                                ),
+                                "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                                "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+                                "Referer": _origin + "/",
+                                "Sec-Fetch-Dest": "image",
+                                "Sec-Fetch-Mode": "no-cors",
+                                "Sec-Fetch-Site": "same-origin",
+                            }
+                            _r = _requests.get(picked, timeout=20, headers=_hdrs_browser, allow_redirects=True)
+                            if _r.status_code == 403:
+                                # Reintento sin Referer (algunos sitios lo rechazan si no matchea)
+                                _hdrs2 = {k: v for k, v in _hdrs_browser.items() if k != "Referer"}
+                                _r = _requests.get(picked, timeout=20, headers=_hdrs2, allow_redirects=True)
                             _r.raise_for_status()
                             img_bytes = _r.content
                             mime = (_r.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip().lower()
