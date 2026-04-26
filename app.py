@@ -1001,24 +1001,32 @@ if page == "Imágenes":
                                 id_token=id_token,
                                 mime=mime,
                             )
-                        # Verificar que el archivo es realmente accesible
+                        # Verificar que el archivo es realmente accesible (con token)
                         with st.spinner("Verificando que la imagen sea accesible..."):
                             _check = _requests.get(_info["public_url"], timeout=10)
                             _info["public_check_status"] = _check.status_code
+                        # Armar valor para guardar: path + ?alt=media + &token (sino el catálogo público no lo lee)
+                        _meta = _info.get("firebase_meta") or {}
+                        _dl_token = (_meta.get("downloadTokens") or "").split(",")[0].strip()
+                        _stored_value = new_path  # ya viene con %2F
+                        if _dl_token:
+                            _stored_value = f"{new_path}?alt=media&token={_dl_token}"
+                        _info["stored_image_field"] = _stored_value
                         with st.spinner("Actualizando producto en Kyte..."):
                             _prod = dict(selected)
-                            _prod["image"] = new_path
-                            _prod["imageLarge"] = new_path
-                            _prod["imageMedium"] = new_path
-                            _prod["imageThumb"] = new_path
-                            client.update_product(_prod)
+                            _prod["image"] = _stored_value
+                            _prod["imageLarge"] = _stored_value
+                            _prod["imageMedium"] = _stored_value
+                            _prod["imageThumb"] = _stored_value
+                            # clean_images=False — sino el strip nos saca el ?alt=media&token
+                            client.update_product(_prod, clean_images=False)
                         # refrescar el producto en cache local
                         for _i, _p in enumerate(st.session_state.imgmode_products):
                             if (_p.get("id") or _p.get("_id")) == pid:
-                                _p["image"] = new_path
-                                _p["imageLarge"] = new_path
-                                _p["imageMedium"] = new_path
-                                _p["imageThumb"] = new_path
+                                _p["image"] = _stored_value
+                                _p["imageLarge"] = _stored_value
+                                _p["imageMedium"] = _stored_value
+                                _p["imageThumb"] = _stored_value
                                 st.session_state.imgmode_products[_i] = _p
                                 break
                         if _info["public_check_status"] == 200:

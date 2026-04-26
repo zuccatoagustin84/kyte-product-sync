@@ -324,14 +324,17 @@ class KyteClient:
                     g[field] = self._strip_image_field(g[field], uid)
         return p
 
-    def update_product(self, product: dict) -> dict:
+    def update_product(self, product: dict, *, clean_images: bool = True) -> dict:
         """
         Update a product via PUT.
         Requires the FULL product object (Kyte replaces the entire document).
-        Automatically cleans image paths to prevent duplication.
+
+        clean_images=True (default): strip uid prefix + ?alt=media (legacy Kyte behavior).
+        clean_images=False: PUT exactly what was given (use cuando ya armaste los image fields
+        con token de Firebase Storage, sino el catálogo público no puede leerlos).
         """
-        cleaned = self._clean_images_for_put(product)
-        resp = self._request("PUT", "/product", json=cleaned)
+        payload = self._clean_images_for_put(product) if clean_images else product
+        resp = self._request("PUT", "/product", json=payload)
         try:
             return resp.json()
         except Exception:
