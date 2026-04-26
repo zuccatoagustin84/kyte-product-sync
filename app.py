@@ -954,7 +954,7 @@ if page == "Imágenes":
 
             if do_upload:
                 _rt = st.session_state.get("kyte_refresh_token")
-                _kt = st.session_state.get("kyte_token")
+                _kt = (st.session_state.get("kyte_token_input") or token or "").strip()
                 if not pid or pid == f"{code}__{name}":
                     st.error("Este producto no tiene id de Kyte (¿está sincronizado?). No puedo subirle imagen.")
                 else:
