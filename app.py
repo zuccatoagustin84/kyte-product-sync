@@ -86,25 +86,25 @@ _BING_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+_COMMON_HEADERS = {
+    "User-Agent": _BING_UA,
+    "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _search_images_bing(query: str, num: int = 12) -> list[dict]:
-    """
-    Busca imágenes scrapeando Bing Images (sin API key).
-    Cada resultado en HTML lleva un atributo m="<JSON>" con murl/turl/t/purl.
-    """
+def _search_images_bing(query: str, num: int = 20) -> list[dict]:
+    """Bing Images scrape — atributo m="<JSON>" en <a class="iusc">."""
     import html as _html
     import re as _re
     r = _requests.get(
         "https://www.bing.com/images/search",
         params={"q": query, "first": "1", "form": "HDRSC2", "mkt": "es-AR", "safesearch": "Moderate"},
-        headers={"User-Agent": _BING_UA, "Accept-Language": "es-AR,es;q=0.9,en;q=0.8"},
+        headers=_COMMON_HEADERS,
         timeout=15,
     )
     if not r.ok:
         raise RuntimeError(f"Bing {r.status_code}: {r.text[:200]}")
-    # Solo <a class="iusc" ...> con atributo m="..." (resultados clickeables, evita carruseles "related")
     raw_matches = _re.findall(r'<a\b[^>]*\bclass="iusc"[^>]*\bm="([^"]+)"', r.text)
     out: list[dict] = []
     seen: set[str] = set()
@@ -128,6 +128,142 @@ def _search_images_bing(query: str, num: int = 12) -> list[dict]:
         if len(out) >= num:
             break
     return out
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _search_images_google(query: str, num: int = 20) -> list[dict]:
+    """Google Images scrape — frecuentemente bloquea bots (JS-required / captcha)."""
+    import re as _re
+    r = _requests.get(
+        "https://www.google.com/search",
+        params={"q": query, "tbm": "isch", "hl": "es-AR", "gl": "ar", "safe": "off"},
+        headers=_COMMON_HEADERS,
+        timeout=15,
+    )
+    if not r.ok:
+        raise RuntimeError(f"Google {r.status_code}")
+    text = r.text
+    if "captcha" in text.lower() or "/sorry/" in text:
+        raise RuntimeError("Google devolvió CAPTCHA — usá Bing o configurá CSE con API key")
+    if "/httpservice/retry/enablejs" in text or "<noscript>" in text and "enablejs" in text:
+        raise RuntimeError(
+            "Google requiere JavaScript (no se puede scrapear desde server). "
+            "Probá Bing, o configurá Google Custom Search API."
+        )
+    matches = _re.findall(
+        r'\["(https?://[^"\\]+\.(?:jpe?g|png|webp|gif)(?:\?[^"\\]*)?)",\s*(\d+),\s*(\d+)\]',
+        text,
+        flags=_re.IGNORECASE,
+    )
+    out: list[dict] = []
+    seen: set[str] = set()
+    for url, h, w in matches:
+        if any(d in url for d in ("gstatic.com", "google.com/logos", "googleusercontent.com/static")):
+            continue
+        if url in seen:
+            continue
+        seen.add(url)
+        out.append({
+            "url": url, "thumb": url, "title": "", "context": None,
+            "width": int(w) if w else None, "height": int(h) if h else None,
+        })
+        if len(out) >= num:
+            break
+    if not out:
+        raise RuntimeError("Google: 0 resultados parseables (probablemente bloqueado). Usá Bing.")
+    return out
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _search_images_ddg(query: str, num: int = 20) -> list[dict]:
+    """DuckDuckGo Images — flow vqd token + i.js JSON."""
+    import re as _re
+    s = _requests.Session()
+    s.headers.update(_COMMON_HEADERS)
+    r1 = s.get(
+        "https://duckduckgo.com/",
+        params={"q": query, "iax": "images", "ia": "images"},
+        timeout=15,
+    )
+    m = _re.search(r'vqd=["\']?(\d+-\d+(?:-\d+)?)', r1.text)
+    if not m:
+        raise RuntimeError("DuckDuckGo: no vqd token (puede estar bloqueando)")
+    vqd = m.group(1)
+    r2 = s.get(
+        "https://duckduckgo.com/i.js",
+        params={"l": "es-ar", "o": "json", "q": query, "vqd": vqd, "f": ",,,", "p": "1"},
+        headers={"Referer": "https://duckduckgo.com/"},
+        timeout=15,
+    )
+    if not r2.ok:
+        raise RuntimeError(f"DuckDuckGo {r2.status_code}")
+    data = r2.json()
+    out: list[dict] = []
+    for item in (data.get("results") or [])[:num]:
+        out.append({
+            "url": item.get("image"),
+            "thumb": item.get("thumbnail") or item.get("image"),
+            "title": item.get("title", ""),
+            "context": item.get("url"),
+            "width": item.get("width"),
+            "height": item.get("height"),
+        })
+    return out
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _search_images_yandex(query: str, num: int = 20) -> list[dict]:
+    """Yandex Images — frecuentemente devuelve captcha desde IPs de servidor."""
+    import html as _html
+    import re as _re
+    r = _requests.get(
+        "https://yandex.com/images/search",
+        params={"text": query, "from": "tabbar"},
+        headers=_COMMON_HEADERS,
+        timeout=15,
+    )
+    if not r.ok:
+        raise RuntimeError(f"Yandex {r.status_code}")
+    if "captcha" in r.text.lower() or "No eres un robot" in r.text or "Are you a robot" in r.text:
+        raise RuntimeError("Yandex devolvió CAPTCHA — usá Bing")
+    matches = _re.findall(r'data-bem=\'(\{[^\']+\})\'', r.text)
+    out: list[dict] = []
+    seen: set[str] = set()
+    for raw in matches:
+        try:
+            d = _json.loads(_html.unescape(raw))
+        except Exception:
+            continue
+        item = d.get("serp-item") or {}
+        url = item.get("img_href") or ""
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        thumb = ((item.get("thumb") or {}).get("url")) or url
+        snip = item.get("snippet") or {}
+        prev = (item.get("preview") or [{}])[0]
+        out.append({
+            "url": url,
+            "thumb": thumb,
+            "title": snip.get("title") or "",
+            "context": snip.get("url"),
+            "width": prev.get("w"),
+            "height": prev.get("h"),
+        })
+        if len(out) >= num:
+            break
+    if not out:
+        raise RuntimeError("Yandex: 0 resultados (probablemente bloqueado). Usá Bing.")
+    return out
+
+
+# Bing primero — es el único confiable scrapeando sin browser real
+_IMAGE_ENGINES = {
+    "Bing": _search_images_bing,
+    "Google": _search_images_google,
+    "DuckDuckGo": _search_images_ddg,
+    "Yandex": _search_images_yandex,
+}
 
 
 try:
@@ -819,7 +955,15 @@ if page == "Imágenes":
         st.session_state[_sig_key] = _sig
         st.session_state[f"img_query_{pid}"] = default_q
 
-    qc1, qc2, qc3 = st.columns([4, 1, 1])
+    qc0, qc1, qc2, qc3 = st.columns([1.3, 3, 1, 1])
+    with qc0:
+        engine = st.selectbox(
+            "Motor",
+            list(_IMAGE_ENGINES.keys()),
+            index=0,
+            key="img_engine",
+            help="Bing es el más confiable. Google/Yandex/DuckDuckGo bloquean scraping desde servidores (suelen devolver CAPTCHA o JS-required).",
+        )
     with qc1:
         query = st.text_input(
             "Término de búsqueda",
@@ -841,14 +985,18 @@ if page == "Imágenes":
             st.session_state.pop("img_results", None)
             st.session_state.pop("img_picked", None)
             st.session_state.pop("img_searched_query", None)
-            _search_images_bing.clear()
+            st.session_state.pop("img_searched_engine", None)
+            for _fn in _IMAGE_ENGINES.values():
+                _fn.clear()
             st.rerun()
 
     if do_search:
         q_clean = query.strip()
-        with st.spinner(f"Buscando '{q_clean}'..."):
+        _fn = _IMAGE_ENGINES[engine]
+        with st.spinner(f"Buscando '{q_clean}' en {engine}..."):
             try:
-                st.session_state.img_results = _search_images_bing(q_clean, 20)
+                st.session_state.img_results = _fn(q_clean, 20)
+                st.session_state.img_searched_engine = engine
                 st.session_state.img_searched_query = q_clean
                 st.session_state.pop("img_picked", None)
             except Exception as e:
@@ -857,15 +1005,17 @@ if page == "Imágenes":
 
     results = st.session_state.get("img_results", [])
     searched = st.session_state.get("img_searched_query", "")
+    searched_engine = st.session_state.get("img_searched_engine", "")
 
     if results:
-        # Avisar si el query del input ya no coincide con lo que se buscó
-        if searched and searched != query.strip():
+        stale_q = searched and searched != query.strip()
+        stale_eng = searched_engine and searched_engine != engine
+        if stale_q or stale_eng:
             st.warning(
-                f"⚠️ Estos son resultados de **{searched!r}**. Cambiaste el término — "
-                f"apretá **Buscar** para actualizar."
+                f"⚠️ Resultados de **{searched_engine}** para **{searched!r}**. "
+                f"Apretá **Buscar** para actualizar."
             )
-        st.caption(f"{len(results)} resultados de '{searched}' (clickeá una para elegir):")
+        st.caption(f"{len(results)} resultados de '{searched}' en {searched_engine} (clickeá una para elegir):")
         cols = st.columns(5)
         for i, r in enumerate(results):
             with cols[i % 5]:
