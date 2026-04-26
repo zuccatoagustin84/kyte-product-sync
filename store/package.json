@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
-    "migrate:images": "dotenv -e .env.local -- npx tsx scripts/migrate-images.ts"
+    "migrate:images": "dotenv -e .env.local -- npx tsx scripts/migrate-images.ts",
+    "backfill:image-variants": "dotenv -e .env.local -- npx tsx scripts/backfill-image-variants.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
