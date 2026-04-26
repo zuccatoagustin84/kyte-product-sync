@@ -257,10 +257,73 @@ def _search_images_yandex(query: str, num: int = 20) -> list[dict]:
     return out
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _search_images_google_cse(query: str, num: int = 20) -> list[dict]:
+    """Google Custom Search API — confiable, requiere API key + CX en st.secrets.
+    Free tier: 100 búsquedas/día. Cada llamada devuelve hasta 10 resultados.
+    """
+    try:
+        api_key = st.secrets["GOOGLE_CSE_API_KEY"]
+        cx = st.secrets["GOOGLE_CSE_CX"]
+    except Exception:
+        raise RuntimeError(
+            "Google CSE no configurado. Agregá GOOGLE_CSE_API_KEY y GOOGLE_CSE_CX "
+            "en Streamlit Cloud → Settings → Secrets. Ver instrucciones en el botón ⚙️."
+        )
+    out: list[dict] = []
+    seen: set[str] = set()
+    # CSE máx 10 por request, paginar con start=1, 11, 21...
+    for start in (1, 11):
+        if len(out) >= num:
+            break
+        try:
+            r = _requests.get(
+                "https://www.googleapis.com/customsearch/v1",
+                params={
+                    "key": api_key, "cx": cx, "q": query,
+                    "searchType": "image", "num": "10", "start": str(start),
+                    "safe": "off", "hl": "es",
+                },
+                timeout=15,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Google CSE error de red: {e}")
+        if r.status_code == 429:
+            raise RuntimeError("Google CSE: cuota diaria agotada (100/día). Probá mañana o usá Bing.")
+        if r.status_code == 403:
+            raise RuntimeError(
+                "Google CSE 403 — verificá que la API esté habilitada y la key tenga permisos."
+            )
+        if not r.ok:
+            raise RuntimeError(f"Google CSE {r.status_code}: {r.text[:200]}")
+        data = r.json()
+        for it in (data.get("items") or []):
+            url = it.get("link") or ""
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            img = it.get("image") or {}
+            out.append({
+                "url": url,
+                "thumb": img.get("thumbnailLink") or url,
+                "title": it.get("title") or "",
+                "context": img.get("contextLink"),
+                "width": img.get("width"),
+                "height": img.get("height"),
+            })
+            if len(out) >= num:
+                break
+    if not out:
+        raise RuntimeError("Google CSE: 0 resultados.")
+    return out
+
+
 # Bing primero — es el único confiable scrapeando sin browser real
+# Google CSE necesita API key configurada en secrets (100 búsquedas/día gratis)
 _IMAGE_ENGINES = {
     "Bing": _search_images_bing,
-    "Google": _search_images_google,
+    "Google CSE (API)": _search_images_google_cse,
+    "Google (scrape)": _search_images_google,
     "DuckDuckGo": _search_images_ddg,
     "Yandex": _search_images_yandex,
 }
@@ -955,25 +1018,44 @@ if page == "Imágenes":
         st.session_state[_sig_key] = _sig
         st.session_state[f"img_query_{pid}"] = default_q
 
-    qc0, qc1, qc2, qc3 = st.columns([1.3, 3, 1, 1])
+    # Setup helper para Google CSE
+    with st.expander("⚙️ Configurar Google CSE (API gratis 100/día)", expanded=False):
+        st.markdown(
+            "1. Ir a https://programmablesearchengine.google.com/ → crear motor → "
+            "configurar **\"buscar en toda la web\"** + activar **\"búsqueda de imágenes\"** → "
+            "copiar el `Search engine ID` (CX).\n"
+            "2. Ir a https://console.cloud.google.com/ → APIs → habilitar **Custom Search API** → "
+            "crear API key.\n"
+            "3. En Streamlit Cloud → tu app → Settings → Secrets, pegar:\n"
+            "```toml\n"
+            'GOOGLE_CSE_API_KEY = "AIza..."\n'
+            'GOOGLE_CSE_CX = "abc123..."\n'
+            "```\n"
+            "4. Save → la app se reinicia sola.\n\n"
+            "**Cuota:** 100 búsquedas/día gratis. Cada \"Buscar\" gasta 1-2 (paginación)."
+        )
+
+    qc0, qc1, qc2, qc3 = st.columns([1.5, 3, 1, 1])
     with qc0:
         engine = st.selectbox(
             "Motor",
-            list(_IMAGE_ENGINES.keys()),
+            list(_IMAGE_ENGINES.keys()) + ["Manual (pegar URL)"],
             index=0,
             key="img_engine",
-            help="Bing es el más confiable. Google/Yandex/DuckDuckGo bloquean scraping desde servidores (suelen devolver CAPTCHA o JS-required).",
+            help="Bing scrapea sin API. Google CSE = API oficial (100/día gratis). Otros motores suelen bloquear bots. Manual = pegar URL directa.",
         )
+    is_manual = engine == "Manual (pegar URL)"
     with qc1:
         query = st.text_input(
-            "Término de búsqueda",
-            value=default_q,
+            "URL de la imagen" if is_manual else "Término de búsqueda",
+            value="" if is_manual else default_q,
             key=f"img_query_{pid}",
+            placeholder="https://ejemplo.com/imagen.jpg" if is_manual else "",
         )
     with qc2:
         st.write("")
         do_search = st.button(
-            "🔍 Buscar",
+            "✓ Usar" if is_manual else "🔍 Buscar",
             type="primary",
             disabled=not query.strip(),
             use_container_width=True,
@@ -992,16 +1074,28 @@ if page == "Imágenes":
 
     if do_search:
         q_clean = query.strip()
-        _fn = _IMAGE_ENGINES[engine]
-        with st.spinner(f"Buscando '{q_clean}' en {engine}..."):
-            try:
-                st.session_state.img_results = _fn(q_clean, 20)
+        if is_manual:
+            if not q_clean.lower().startswith(("http://", "https://")):
+                st.error("La URL tiene que empezar con http:// o https://")
+            else:
+                st.session_state.img_results = [{
+                    "url": q_clean, "thumb": q_clean, "title": "(manual)",
+                    "context": None, "width": None, "height": None,
+                }]
                 st.session_state.img_searched_engine = engine
                 st.session_state.img_searched_query = q_clean
                 st.session_state.pop("img_picked", None)
-            except Exception as e:
-                st.error(str(e))
-                st.session_state.img_results = []
+        else:
+            _fn = _IMAGE_ENGINES[engine]
+            with st.spinner(f"Buscando '{q_clean}' en {engine}..."):
+                try:
+                    st.session_state.img_results = _fn(q_clean, 20)
+                    st.session_state.img_searched_engine = engine
+                    st.session_state.img_searched_query = q_clean
+                    st.session_state.pop("img_picked", None)
+                except Exception as e:
+                    st.error(str(e))
+                    st.session_state.img_results = []
 
     results = st.session_state.get("img_results", [])
     searched = st.session_state.get("img_searched_query", "")
