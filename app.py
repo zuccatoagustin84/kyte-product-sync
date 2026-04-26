@@ -994,13 +994,17 @@ if page == "Imágenes":
                             else:
                                 raise RuntimeError("No hay token de Kyte cargado.")
                         with st.spinner("Subiendo a Firebase Storage de Kyte..."):
-                            new_path = upload_image_to_kyte_storage(
+                            new_path, _info = upload_image_to_kyte_storage(
                                 img_bytes,
                                 uid=uid,
                                 product_id=str(pid),
                                 id_token=id_token,
                                 mime=mime,
                             )
+                        # Verificar que el archivo es realmente accesible
+                        with st.spinner("Verificando que la imagen sea accesible..."):
+                            _check = _requests.get(_info["public_url"], timeout=10)
+                            _info["public_check_status"] = _check.status_code
                         with st.spinner("Actualizando producto en Kyte..."):
                             _prod = dict(selected)
                             _prod["image"] = new_path
@@ -1017,7 +1021,15 @@ if page == "Imágenes":
                                 _p["imageThumb"] = new_path
                                 st.session_state.imgmode_products[_i] = _p
                                 break
-                        st.success(f"✅ Imagen subida y producto actualizado · path: `{new_path}`")
+                        if _info["public_check_status"] == 200:
+                            st.success(f"✅ Imagen subida y verificada · `{new_path}`")
+                        else:
+                            st.warning(
+                                f"⚠️ Subido pero el GET de verificación dio "
+                                f"{_info['public_check_status']} — la foto puede no aparecer."
+                            )
+                        with st.expander("🔍 Diagnóstico de subida", expanded=False):
+                            st.json(_info)
                         st.session_state.pop("img_picked", None)
                         st.session_state.pop("img_results", None)
                     except KyteAPIError as e:

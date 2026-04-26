@@ -123,11 +123,11 @@ def upload_image_to_kyte_storage(
     product_id: str,
     id_token: str,
     mime: str = "image/jpeg",
-) -> str:
+) -> tuple[str, dict]:
     """Sube bytes de imagen al Firebase Storage de Kyte.
 
-    Devuelve el path tal cual lo espera el campo `image` del producto
-    (sin el prefijo `uid/` y sin `?alt=media`, igual que `_strip_image_field`).
+    Devuelve (path_sin_uid, info_dict) donde info_dict incluye la respuesta
+    completa de Firebase y la URL pública para verificar.
     """
     import uuid
     from urllib.parse import quote
@@ -137,39 +137,57 @@ def upload_image_to_kyte_storage(
     fname = f"{uuid.uuid4().hex}.{ext}"
     path = f"{uid}/products/{product_id}/{fname}"
     encoded = quote(path, safe="")
+    upload_url = f"{FIREBASE_STORAGE_BASE}?name={encoded}&uploadType=media"
 
-    resp = requests.post(
-        f"{FIREBASE_STORAGE_BASE}?name={encoded}&uploadType=media",
-        data=image_bytes,
-        headers={
-            "Authorization": f"Firebase {id_token}",
-            "Content-Type": mime,
-            "Origin": "https://web.kyteapp.com",
-            "Referer": "https://web.kyteapp.com/",
-        },
-        timeout=30,
-    )
-    if resp.status_code >= 400:
-        # Reintento con esquema "Bearer" por si Firebase Storage rechaza el "Firebase" header
-        resp2 = requests.post(
-            f"{FIREBASE_STORAGE_BASE}?name={encoded}&uploadType=media",
+    def _do_upload(scheme: str) -> requests.Response:
+        return requests.post(
+            upload_url,
             data=image_bytes,
             headers={
-                "Authorization": f"Bearer {id_token}",
+                "Authorization": f"{scheme} {id_token}",
                 "Content-Type": mime,
                 "Origin": "https://web.kyteapp.com",
                 "Referer": "https://web.kyteapp.com/",
+                "x-goog-upload-protocol": "raw",
             },
             timeout=30,
         )
+
+    resp = _do_upload("Firebase")
+    if resp.status_code >= 400:
+        resp2 = _do_upload("Bearer")
         if resp2.status_code >= 400:
             raise KyteAPIError(
                 resp.status_code,
-                f"Firebase Storage upload falló: {resp.status_code}/{resp2.status_code} {resp.text[:300]}",
+                f"Firebase Storage upload falló: Firebase={resp.status_code} Bearer={resp2.status_code} body={resp.text[:300]}",
                 FIREBASE_STORAGE_BASE,
             )
-    # path sin uid/ — Kyte lo agrega solo al servir
-    return f"products/{product_id}/{fname}"
+        resp = resp2
+
+    try:
+        meta = resp.json()
+    except Exception:
+        meta = {"raw": resp.text[:400]}
+
+    download_token = (meta.get("downloadTokens") or "").split(",")[0]
+    public_url = f"{FIREBASE_STORAGE_BASE}/{encoded}?alt=media"
+    if download_token:
+        public_url += f"&token={download_token}"
+
+    info = {
+        "upload_status": resp.status_code,
+        "firebase_meta": meta,
+        "public_url": public_url,
+        "stored_path": path,
+        "bytes": len(image_bytes),
+        "mime": mime,
+    }
+
+    # Kyte guarda los paths URL-encoded (slashes como %2F) y agrega `uid%2F` al servir.
+    # Por eso devolvemos `products%2F{pid}%2F{fname}` — sino Firebase Storage da 404
+    # (las / literales rompen el endpoint /o/{name}).
+    stored_value = f"products%2F{product_id}%2F{fname}"
+    return stored_value, info
 
 
 @dataclass
