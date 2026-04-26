@@ -19,6 +19,7 @@ import {
   BarChart3Icon,
   RefreshCwIcon,
   SettingsIcon,
+  FileTextIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
@@ -46,6 +47,7 @@ const allNavItems: NavItem[] = [
   { href: "/admin/usuarios", label: "Usuarios", Icon: UsersIcon, permission: "users" },
   { href: "/admin/configuracion", label: "Configuración", Icon: SettingsIcon, permission: "settings" },
   { href: "/admin/sync", label: "Actualizar precios", Icon: RefreshCwIcon, permission: "sync" },
+  { href: "/admin/catalogo", label: "Catálogo", Icon: FileTextIcon, permission: "products" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
