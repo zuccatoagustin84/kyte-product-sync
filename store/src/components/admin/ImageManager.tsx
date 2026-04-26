@@ -3,12 +3,23 @@
 import { useState, useEffect, useRef } from "react";
 import type { ProductImage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { imgUrl } from "@/lib/image-url";
+import { WebImageSearch } from "@/components/admin/WebImageSearch";
 
 interface ImageManagerProps {
   productId: string;
+  // Datos del producto para auto-llenar la búsqueda de imágenes web.
+  productCode?: string | null;
+  productName?: string | null;
+  productCategory?: string | null;
 }
 
-export function ImageManager({ productId }: ImageManagerProps) {
+export function ImageManager({
+  productId,
+  productCode,
+  productName,
+  productCategory,
+}: ImageManagerProps) {
   const [images, setImages] = useState<ProductImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -134,11 +145,38 @@ export function ImageManager({ productId }: ImageManagerProps) {
     fetchImages();
   }
 
+  const [showWebSearch, setShowWebSearch] = useState(false);
+
   return (
     <div className="space-y-3">
-      <label className="block text-sm font-medium text-gray-700">
-        Imágenes del producto
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium text-gray-700">
+          Imágenes del producto
+        </label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowWebSearch(true)}
+          className="text-xs"
+        >
+          Buscar en la web
+        </Button>
+      </div>
+
+      {showWebSearch && (
+        <WebImageSearch
+          productId={productId}
+          defaultCode={productCode ?? ""}
+          defaultName={productName ?? ""}
+          defaultCategory={productCategory ?? ""}
+          onClose={() => setShowWebSearch(false)}
+          onImported={() => {
+            setShowWebSearch(false);
+            fetchImages();
+          }}
+        />
+      )}
 
       {/* Upload area */}
       <div
@@ -203,9 +241,10 @@ export function ImageManager({ productId }: ImageManagerProps) {
               }`}
             >
               <img
-                src={img.url}
+                src={imgUrl(img, "thumb")}
                 alt={`Imagen ${idx + 1}`}
                 className="w-full aspect-square object-cover"
+                loading="lazy"
               />
 
               {/* Primary badge */}

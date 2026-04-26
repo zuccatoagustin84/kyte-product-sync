@@ -60,7 +60,7 @@ export function ProductCard({ product }: ProductCardProps) {
       >
         {product.image_url ? (
           <Image
-            src={product.image_url}
+            src={product.medium_image_url || product.image_url}
             alt={product.name}
             fill
             sizes="(max-width: 768px) 50vw, 25vw"

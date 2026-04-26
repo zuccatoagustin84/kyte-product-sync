@@ -8,6 +8,11 @@ export interface ProductImage {
   id: string;
   product_id: string;
   url: string;
+  thumb_url?: string | null;
+  medium_url?: string | null;
+  width?: number | null;
+  height?: number | null;
+  source?: string | null;
   sort_order: number;
   is_primary: boolean;
   created_at: string;
@@ -22,6 +27,8 @@ export interface Product {
   sale_price: number;
   cost_price: number | null;
   image_url: string | null;
+  thumb_image_url?: string | null;
+  medium_image_url?: string | null;
   description: string | null;
   active: boolean;
   sort_order: number;

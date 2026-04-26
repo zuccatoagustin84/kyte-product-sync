@@ -2,6 +2,12 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { requireRole } from "@/lib/rbac-server";
 import { getCurrentTenant } from "@/lib/tenant";
+import { processAndUpload } from "@/lib/image-processing";
+
+// sharp necesita el runtime de Node (no Edge).
+export const runtime = "nodejs";
+// El procesamiento puede tardar varios segundos para imágenes grandes.
+export const maxDuration = 60;
 
 // GET /api/admin/products/[id]/images — list images for a product
 export async function GET(
@@ -75,28 +81,17 @@ export async function POST(
     );
   }
 
-  // Generate unique filename
-  const ext = file.name.split(".").pop() || "jpg";
-  const filename = `${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
-  // Upload to Supabase Storage
-  const { error: uploadError } = await supabase.storage
-    .from("product-images")
-    .upload(filename, file, {
-      contentType: file.type,
-      upsert: false,
-    });
-
-  if (uploadError) {
-    return Response.json({ error: uploadError.message }, { status: 500 });
+  // Procesar imagen → 3 variantes (thumb/medium/large) y subir a Storage.
+  const buffer = Buffer.from(await file.arrayBuffer());
+  let urls;
+  try {
+    urls = await processAndUpload(buffer, id);
+  } catch (e) {
+    return Response.json(
+      { error: `Procesando imagen: ${(e as Error).message}` },
+      { status: 500 }
+    );
   }
-
-  // Get public URL
-  const { data: urlData } = supabase.storage
-    .from("product-images")
-    .getPublicUrl(filename);
-
-  const url = urlData.publicUrl;
 
   // Check how many images exist for this product
   const { count } = await supabase
@@ -113,9 +108,14 @@ export async function POST(
     .insert({
       company_id: companyId,
       product_id: id,
-      url,
+      url: urls.url,
+      medium_url: urls.medium_url,
+      thumb_url: urls.thumb_url,
+      width: urls.width,
+      height: urls.height,
       sort_order: count ?? 0,
       is_primary: isFirst,
+      source: "upload",
     })
     .select()
     .single();
@@ -124,11 +124,17 @@ export async function POST(
     return Response.json({ error: insertError.message }, { status: 500 });
   }
 
-  // If this is the first/primary image, also update products.image_url for backwards compat
+  // Si es la primer imagen (=> primary), también actualizamos los campos
+  // denormalizados en products para que listings puedan elegir variante sin
+  // joinear con product_images.
   if (isFirst) {
     await supabase
       .from("products")
-      .update({ image_url: url })
+      .update({
+        image_url: urls.url,
+        medium_image_url: urls.medium_url,
+        thumb_image_url: urls.thumb_url,
+      })
       .eq("id", id)
       .eq("company_id", companyId);
   }
@@ -177,12 +183,12 @@ export async function PUT(
       .eq("company_id", companyId);
   }
 
-  // Update products.image_url with the primary image
+  // Sincronizar la imagen primaria denormalizada en products.
   const primary = body.images.find((i) => i.is_primary);
   if (primary) {
     const { data: primaryImg } = await supabase
       .from("product_images")
-      .select("url")
+      .select("url, medium_url, thumb_url")
       .eq("id", primary.id)
       .eq("product_id", id)
       .eq("company_id", companyId)
@@ -191,7 +197,11 @@ export async function PUT(
     if (primaryImg) {
       await supabase
         .from("products")
-        .update({ image_url: primaryImg.url })
+        .update({
+          image_url: primaryImg.url,
+          medium_image_url: primaryImg.medium_url ?? null,
+          thumb_image_url: primaryImg.thumb_url ?? null,
+        })
         .eq("id", id)
         .eq("company_id", companyId);
     }
@@ -231,13 +241,14 @@ export async function DELETE(
     return Response.json({ error: "Imagen no encontrada" }, { status: 404 });
   }
 
-  // Extract storage path from URL
+  // Borrar variantes en Storage (best-effort, no bloqueamos si falla).
   const bucketUrl = supabase.storage.from("product-images").getPublicUrl("").data.publicUrl;
-  const storagePath = img.url.replace(bucketUrl, "");
-
-  // Delete from storage (best effort)
-  if (storagePath) {
-    await supabase.storage.from("product-images").remove([storagePath]);
+  const paths = [img.url, img.medium_url, img.thumb_url]
+    .filter((u): u is string => Boolean(u))
+    .map((u: string) => u.replace(bucketUrl, ""))
+    .filter((p) => p && !p.startsWith("http"));
+  if (paths.length > 0) {
+    await supabase.storage.from("product-images").remove(paths);
   }
 
   // Delete from table
@@ -266,14 +277,21 @@ export async function DELETE(
         .eq("company_id", companyId);
       await supabase
         .from("products")
-        .update({ image_url: next.url })
+        .update({
+          image_url: next.url,
+          medium_image_url: next.medium_url ?? null,
+          thumb_image_url: next.thumb_url ?? null,
+        })
         .eq("id", id)
         .eq("company_id", companyId);
     } else {
-      // No more images
       await supabase
         .from("products")
-        .update({ image_url: null })
+        .update({
+          image_url: null,
+          medium_image_url: null,
+          thumb_image_url: null,
+        })
         .eq("id", id)
         .eq("company_id", companyId);
     }

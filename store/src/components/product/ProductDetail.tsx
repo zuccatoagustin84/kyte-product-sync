@@ -144,7 +144,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
                   }`}
                 >
                   <Image
-                    src={img.url}
+                    src={img.thumb_url || img.medium_url || img.url}
                     alt={`Imagen ${idx + 1}`}
                     fill
                     sizes="64px"
@@ -339,7 +339,7 @@ function RelatedCard({ product }: { product: Product }) {
         <div className="relative w-full aspect-square bg-gray-100">
           {product.image_url ? (
             <Image
-              src={product.image_url}
+              src={product.medium_image_url || product.image_url}
               alt={product.name}
               fill
               sizes="(max-width: 768px) 50vw, 25vw"

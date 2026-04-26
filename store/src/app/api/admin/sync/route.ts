@@ -2,250 +2,420 @@ import { NextRequest } from "next/server";
 import { requireRole } from "@/lib/rbac-server";
 import { createServiceClient } from "@/lib/supabase";
 import { getCurrentTenant } from "@/lib/tenant";
-import * as XLSX from "xlsx";
 
-// ── Excel parsing ─────────────────────────────────────────────────────────────
+// Sync masivo de productos a partir de filas parseadas client-side desde el
+// Excel del distribuidor.  El cliente decide qué columna mapea a qué campo
+// (ver `excel-parser.ts` + UI en `/admin/sync`) y manda el array `rows` ya
+// normalizado.
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type SourceRow = {
   code: string;
   name: string;
   price: number;
+  costPrice?: number | null;
+  rubro?: string | null;
+  description?: string | null;
 };
 
-function parseExcel(buffer: ArrayBuffer): SourceRow[] {
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const raw: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+type CreateInstruction = {
+  code: string;
+  categoryId?: string | null;
+};
 
-  let headerRow = -1;
-  let codigoCol = -1;
-  let articuloCol = -1;
-  let precioCol = -1;
+type ApplyOptions = {
+  // Qué cambios pisar al actualizar.  Si todos están en false, sólo se
+  // actualiza el precio (modo histórico).
+  updateName?: boolean;
+  updateCostPrice?: boolean;
+  updateDescription?: boolean;
+};
 
-  for (let i = 0; i < Math.min(30, raw.length); i++) {
-    const row = raw[i];
-    let fCodigo = -1, fArticulo = -1, fPrecio = -1;
-
-    for (let j = 0; j < row.length; j++) {
-      const val = row[j];
-      if (val == null) continue;
-      const lower = String(val).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (lower.includes("codigo") || lower.includes("digo")) fCodigo = j;
-      else if (lower.includes("articulo")) fArticulo = j;
-      if (lower.includes("precio")) fPrecio = j;
-    }
-
-    if (fArticulo !== -1 && fPrecio !== -1) {
-      headerRow = i;
-      codigoCol = fCodigo;
-      articuloCol = fArticulo;
-      precioCol = fPrecio;
-      break;
-    }
-  }
-
-  if (headerRow === -1) {
-    throw new Error("No se encontró encabezado. El archivo debe tener columnas 'Articulo' y 'Precio'.");
-  }
-
-  const results: SourceRow[] = [];
-  for (let i = headerRow + 1; i < raw.length; i++) {
-    const row = raw[i];
-    if (!row || row.every((v) => v == null)) continue;
-
-    const name = row[articuloCol] != null ? String(row[articuloCol]).trim() : "";
-    const priceRaw = row[precioCol] != null ? parseFloat(String(row[precioCol]).replace(",", ".")) : NaN;
-
-    if (!name || isNaN(priceRaw)) continue;
-
-    // Código: columna Codigo si existe, si no usar Articulo
-    let code = "";
-    if (codigoCol !== -1 && row[codigoCol] != null) {
-      code = String(row[codigoCol]).trim().toLowerCase();
-    } else {
-      code = name.toLowerCase();
-    }
-
-    results.push({ code, name, price: priceRaw });
-  }
-
-  return results;
-}
-
-// ── Preview item type ─────────────────────────────────────────────────────────
+type RequestBody = {
+  rows: SourceRow[];
+  action?: "preview" | "apply" | "create";
+  applyCodes?: string[];
+  createList?: CreateInstruction[];
+  options?: ApplyOptions;
+};
 
 export type SyncPreviewItem = {
   code: string;
   name: string;
   storeName: string;
+  storeId: string | null;
+  storeCategoryName: string | null;
   currentPrice: number;
   newPrice: number;
+  currentCostPrice: number | null;
+  newCostPrice: number | null;
+  diff: number;
+  diffPct: number;
+  rubro: string | null;
+  suggestedCategoryId: string | null;
+  suggestedCategoryName: string | null;
   willUpdate: boolean;
   reason?: string;
 };
 
-// ── Main route handler ────────────────────────────────────────────────────────
+export type KyteOnlyItem = {
+  id: string;
+  code: string;
+  name: string;
+  price: number;
+  category: string;
+};
+
+// ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   const auth = await requireRole(request, ["admin", "superadmin"]);
   if (auth instanceof Response) return auth;
   const { id: companyId } = await getCurrentTenant();
 
-  const apply = request.nextUrl.searchParams.get("apply") === "true";
-  const create = request.nextUrl.searchParams.get("create") === "true";
-
-  let formData: FormData;
+  let body: RequestBody;
   try {
-    formData = await request.formData();
+    body = await request.json();
   } catch {
-    return Response.json({ error: "Datos de formulario inválidos" }, { status: 400 });
+    return Response.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const file = formData.get("file");
-  if (!file || typeof file === "string") {
-    return Response.json({ error: "No se recibió ningún archivo (campo 'file')" }, { status: 400 });
+  if (!Array.isArray(body.rows) || body.rows.length === 0) {
+    return Response.json({ error: "No se recibieron filas" }, { status: 400 });
   }
 
-  // Parsear Excel
-  let sourceRows: SourceRow[];
-  try {
-    sourceRows = parseExcel(await (file as File).arrayBuffer());
-  } catch (e) {
-    return Response.json({ error: `Error leyendo Excel: ${(e as Error).message}` }, { status: 400 });
-  }
+  const action = body.action ?? "preview";
+  const options: ApplyOptions = body.options ?? {};
 
-  if (sourceRows.length === 0) {
-    return Response.json({ error: "El archivo no contiene filas válidas" }, { status: 400 });
-  }
-
-  // Obtener todos los productos de Supabase de esta company
   const supabase = createServiceClient();
-  const { data: storeProducts, error: fetchError } = await supabase
-    .from("products")
-    .select("id, name, code, sale_price")
-    .eq("company_id", companyId)
-    .not("code", "is", null);
+  const [{ data: storeProducts, error: fetchError }, { data: cats }] = await Promise.all([
+    supabase
+      .from("products")
+      .select("id, name, code, sale_price, cost_price, description, category_id, category:categories(id,name)")
+      .eq("company_id", companyId),
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("company_id", companyId),
+  ]);
 
   if (fetchError) {
     return Response.json({ error: `Error obteniendo productos: ${fetchError.message}` }, { status: 500 });
   }
 
-  // Índice por código (case-insensitive)
-  const storeByCode = new Map(
-    (storeProducts ?? []).map((p) => [p.code!.trim().toLowerCase(), p])
-  );
+  type StoreProductRow = {
+    id: string;
+    name: string;
+    code: string | null;
+    sale_price: number;
+    cost_price: number | null;
+    description: string | null;
+    category_id: string | null;
+    category?: { id: string; name: string } | { id: string; name: string }[] | null;
+  };
+  const products = (storeProducts as unknown as StoreProductRow[]) ?? [];
+  const categories = (cats as Array<{ id: string; name: string }>) ?? [];
 
-  // Comparar y armar preview
+  const storeByCode = new Map<string, StoreProductRow>();
+  for (const p of products) {
+    if (!p.code) continue;
+    storeByCode.set(p.code.trim().toLowerCase(), p);
+  }
+
+  // Map de categorías por nombre normalizado para sugerir match contra el rubro
+  // del Excel.  Si "Rubro = Wadfow" y existe la categoría "Wadfow" en la
+  // tienda, la pre-seleccionamos al crear.
+  const catByLowerName = new Map<string, { id: string; name: string }>();
+  for (const c of categories) {
+    catByLowerName.set(c.name.trim().toLowerCase(), c);
+  }
+
+  // ── Build preview ───────────────────────────────────────────────────────────
   const preview: SyncPreviewItem[] = [];
-  const updatesToApply: Array<{ id: string; newPrice: number; code: string }> = [];
+  const updatesByCode = new Map<
+    string,
+    { id: string; newPrice: number; newName: string; newCost: number | null; newDesc: string | null }
+  >();
 
-  for (const src of sourceRows) {
-    const match = storeByCode.get(src.code);
+  for (const src of body.rows) {
+    const codeKey = (src.code ?? "").toString().trim().toLowerCase();
+    const cleanName = (src.name ?? "").toString().trim();
+    const cleanRubro = src.rubro != null ? String(src.rubro).trim() : null;
+    const cleanDesc = src.description != null ? String(src.description).trim() : null;
+    const newPrice = Number(src.price) || 0;
+    const newCost = src.costPrice != null ? (Number(src.costPrice) || 0) : null;
+
+    const suggestedCat = cleanRubro
+      ? catByLowerName.get(cleanRubro.toLowerCase()) ?? null
+      : null;
+
+    if (!codeKey) {
+      preview.push({
+        code: "",
+        name: cleanName,
+        storeName: "",
+        storeId: null,
+        storeCategoryName: null,
+        currentPrice: 0,
+        newPrice,
+        currentCostPrice: null,
+        newCostPrice: newCost,
+        diff: 0,
+        diffPct: 0,
+        rubro: cleanRubro,
+        suggestedCategoryId: suggestedCat?.id ?? null,
+        suggestedCategoryName: suggestedCat?.name ?? null,
+        willUpdate: false,
+        reason: "Sin código",
+      });
+      continue;
+    }
+
+    const match = storeByCode.get(codeKey);
 
     if (!match) {
       preview.push({
-        code: src.code,
-        name: src.name,
+        code: codeKey,
+        name: cleanName,
         storeName: "",
+        storeId: null,
+        storeCategoryName: null,
         currentPrice: 0,
-        newPrice: src.price,
+        newPrice,
+        currentCostPrice: null,
+        newCostPrice: newCost,
+        diff: 0,
+        diffPct: 0,
+        rubro: cleanRubro,
+        suggestedCategoryId: suggestedCat?.id ?? null,
+        suggestedCategoryName: suggestedCat?.name ?? null,
         willUpdate: false,
         reason: "No encontrado en la tienda",
       });
       continue;
     }
 
-    if (src.price <= 0) {
+    const cat = Array.isArray(match.category) ? match.category[0] : match.category;
+    const storeCategoryName = cat?.name ?? null;
+
+    if (newPrice <= 0) {
       preview.push({
-        code: src.code,
-        name: src.name,
+        code: codeKey,
+        name: cleanName,
         storeName: match.name,
+        storeId: match.id,
+        storeCategoryName,
         currentPrice: match.sale_price,
-        newPrice: src.price,
+        newPrice,
+        currentCostPrice: match.cost_price,
+        newCostPrice: newCost,
+        diff: 0,
+        diffPct: 0,
+        rubro: cleanRubro,
+        suggestedCategoryId: null,
+        suggestedCategoryName: null,
         willUpdate: false,
         reason: "Precio cero (ignorado)",
       });
       continue;
     }
 
-    const priceChanged = Math.abs(match.sale_price - src.price) > 0.01;
+    const priceChanged = Math.abs(match.sale_price - newPrice) > 0.001;
+    const nameChanged =
+      Boolean(options.updateName) && cleanName && cleanName !== (match.name ?? "");
+    const costChanged =
+      Boolean(options.updateCostPrice) &&
+      newCost != null &&
+      Math.abs((match.cost_price ?? 0) - newCost) > 0.001;
+    const descChanged =
+      Boolean(options.updateDescription) &&
+      cleanDesc != null &&
+      cleanDesc.length > 0 &&
+      cleanDesc !== (match.description ?? "");
+
+    const willUpdate = priceChanged || nameChanged || costChanged || descChanged;
+    const diff = newPrice - match.sale_price;
+    const diffPct = match.sale_price > 0 ? (diff / match.sale_price) * 100 : 0;
 
     preview.push({
-      code: src.code,
-      name: src.name,
+      code: codeKey,
+      name: cleanName,
       storeName: match.name,
+      storeId: match.id,
+      storeCategoryName,
       currentPrice: match.sale_price,
-      newPrice: src.price,
-      willUpdate: priceChanged,
-      reason: priceChanged ? undefined : "Sin cambio",
+      newPrice,
+      currentCostPrice: match.cost_price,
+      newCostPrice: newCost,
+      diff,
+      diffPct,
+      rubro: cleanRubro,
+      suggestedCategoryId: null,
+      suggestedCategoryName: null,
+      willUpdate,
+      reason: willUpdate ? undefined : "Sin cambio",
     });
 
-    if (priceChanged) {
-      updatesToApply.push({ id: match.id, newPrice: src.price, code: src.code });
+    if (willUpdate) {
+      updatesByCode.set(codeKey, {
+        id: match.id,
+        newPrice,
+        newName: nameChanged ? cleanName : match.name,
+        newCost: costChanged ? newCost : (match.cost_price ?? null),
+        newDesc: descChanged ? cleanDesc : (match.description ?? null),
+      });
     }
   }
 
+  // ── Productos solo en la tienda (no aparecen en el Excel) ───────────────────
+  const sourceCodes = new Set(
+    body.rows
+      .map((r) => (r.code ?? "").toString().trim().toLowerCase())
+      .filter((c) => c)
+  );
+  const kyteOnly: KyteOnlyItem[] = [];
+  for (const p of products) {
+    if (!p.code) continue;
+    const ck = p.code.trim().toLowerCase();
+    if (sourceCodes.has(ck)) continue;
+    const cat = Array.isArray(p.category) ? p.category[0] : p.category;
+    kyteOnly.push({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      price: p.sale_price,
+      category: cat?.name ?? "",
+    });
+  }
+  kyteOnly.sort((a, b) => a.name.localeCompare(b.name, "es"));
+
   const summary = {
-    total: sourceRows.length,
-    toUpdate: updatesToApply.length,
+    total: body.rows.length,
+    toUpdate: updatesByCode.size,
     noChange: preview.filter((r) => r.reason === "Sin cambio").length,
     notFound: preview.filter((r) => r.reason === "No encontrado en la tienda").length,
     zeroPrice: preview.filter((r) => r.reason === "Precio cero (ignorado)").length,
+    noCode: preview.filter((r) => r.reason === "Sin código").length,
+    onlyInStore: kyteOnly.length,
   };
 
-  if (!apply && !create) {
-    return Response.json({ preview, summary });
+  if (action === "preview") {
+    return Response.json({ preview, summary, kyteOnly });
   }
 
-  // Aplicar actualizaciones de precio
-  const updateErrors: Array<{ code: string; error: string }> = [];
-  let updateSuccess = 0;
+  // ── Aplicar updates ─────────────────────────────────────────────────────────
+  if (action === "apply") {
+    const filterCodes =
+      Array.isArray(body.applyCodes) && body.applyCodes.length
+        ? new Set(body.applyCodes.map((c) => c.toLowerCase()))
+        : null;
 
-  if (apply) {
-    for (const { id, newPrice, code } of updatesToApply) {
+    const updateErrors: Array<{ code: string; error: string }> = [];
+    let updateSuccess = 0;
+
+    for (const [code, payload] of updatesByCode) {
+      if (filterCodes && !filterCodes.has(code)) continue;
+      const update: Record<string, unknown> = {
+        sale_price: payload.newPrice,
+        updated_at: new Date().toISOString(),
+      };
+      if (options.updateName) update.name = payload.newName;
+      if (options.updateCostPrice && payload.newCost != null) update.cost_price = payload.newCost;
+      if (options.updateDescription && payload.newDesc != null) update.description = payload.newDesc;
+
       const { error } = await supabase
         .from("products")
-        .update({ sale_price: newPrice, cost_price: newPrice, updated_at: new Date().toISOString() })
-        .eq("id", id)
+        .update(update)
+        .eq("id", payload.id)
         .eq("company_id", companyId);
       if (error) updateErrors.push({ code, error: error.message });
       else updateSuccess++;
     }
+
+    return Response.json({
+      preview,
+      summary,
+      kyteOnly,
+      applied: {
+        success: updateSuccess,
+        failed: updateErrors.length,
+        errors: updateErrors,
+      },
+    });
   }
 
-  // Crear productos nuevos
-  const createErrors: Array<{ code: string; error: string }> = [];
-  let createSuccess = 0;
+  // ── Crear productos nuevos ──────────────────────────────────────────────────
+  if (action === "create") {
+    const createMap = new Map<string, CreateInstruction>();
+    for (const c of body.createList ?? []) {
+      createMap.set(c.code.toLowerCase(), c);
+    }
 
-  if (create) {
-    const toCreate = preview.filter((r) => r.reason === "No encontrado en la tienda" && r.newPrice > 0);
+    const createErrors: Array<{ code: string; error: string }> = [];
+    let createSuccess = 0;
+
+    const toCreate = preview.filter(
+      (r) =>
+        r.reason === "No encontrado en la tienda" &&
+        r.newPrice > 0 &&
+        r.code &&
+        (createMap.size === 0 || createMap.has(r.code))
+    );
+
+    // Mapeamos rows del body para encontrar costPrice + description del nuevo
+    // producto.  Sólo los que están en createMap (o todos si createMap vacío).
+    const rowByCode = new Map<string, SourceRow>();
+    for (const r of body.rows) {
+      rowByCode.set((r.code ?? "").toString().trim().toLowerCase(), r);
+    }
+
     for (const item of toCreate) {
       const slug = item.name
         .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
-      const id = `${Date.now()}-new`;
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const slugSuffix = Math.random().toString(36).slice(2, 6);
+
+      const instruction = createMap.get(item.code);
+      const categoryId =
+        instruction?.categoryId ?? item.suggestedCategoryId ?? null;
+
+      const row = rowByCode.get(item.code);
+      const costPrice = row?.costPrice != null ? Number(row.costPrice) : item.newPrice;
+      const description = row?.description?.toString().trim() || null;
+
       const { error } = await supabase.from("products").insert({
-        id: `${id}-${Math.random().toString(36).slice(2, 6)}`,
+        id,
         company_id: companyId,
-        name: item.name,
+        name: item.name || item.code,
         code: item.code,
         sale_price: item.newPrice,
-        cost_price: item.newPrice,
+        cost_price: costPrice,
         active: true,
-        slug: `${slug}-${Math.random().toString(36).slice(2, 6)}`,
+        slug: `${slug || "producto"}-${slugSuffix}`,
         sort_order: 9999,
+        category_id: categoryId,
+        description,
       });
       if (error) createErrors.push({ code: item.code, error: error.message });
       else createSuccess++;
     }
+
+    return Response.json({
+      preview,
+      summary,
+      kyteOnly,
+      created: {
+        success: createSuccess,
+        failed: createErrors.length,
+        errors: createErrors,
+      },
+    });
   }
 
-  return Response.json({
-    preview,
-    summary,
-    ...(apply && { applied: { success: updateSuccess, failed: updateErrors.length, errors: updateErrors } }),
-    ...(create && { created: { success: createSuccess, failed: createErrors.length, errors: createErrors } }),
-  });
+  return Response.json({ error: `Acción desconocida: ${action}` }, { status: 400 });
 }

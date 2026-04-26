@@ -22,7 +22,7 @@ export function CartItemRow({ item }: CartItemRowProps) {
       <div className="relative shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
         {product.image_url ? (
           <Image
-            src={product.image_url}
+            src={product.thumb_image_url || product.image_url}
             alt={product.name}
             fill
             className="object-cover"

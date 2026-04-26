@@ -807,8 +807,9 @@ function ProductCard({
         {product.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.image_url}
+            src={product.thumb_image_url || product.image_url}
             alt={product.name}
+            loading="lazy"
             className="w-full h-full object-cover"
           />
         ) : (
