@@ -28,7 +28,16 @@ def _deploy_info() -> str:
     except Exception:
         return ""
 
-from kyte_api import KyteClient, KyteConfig, KyteAPIError, parse_kyte_token, refresh_kyte_token
+from kyte_api import (
+    KyteClient,
+    KyteConfig,
+    KyteAPIError,
+    parse_kyte_token,
+    refresh_kyte_token,
+    extract_id_token_from_kyte_token,
+    refresh_firebase_id_token,
+    upload_image_to_kyte_storage,
+)
 from generate_catalog import build_categories, build_image_url
 from jinja2 import Environment, FileSystemLoader
 
@@ -130,202 +139,11 @@ def _search_images_bing(query: str, num: int = 20) -> list[dict]:
     return out
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _search_images_google(query: str, num: int = 20) -> list[dict]:
-    """Google Images scrape — frecuentemente bloquea bots (JS-required / captcha)."""
-    import re as _re
-    r = _requests.get(
-        "https://www.google.com/search",
-        params={"q": query, "tbm": "isch", "hl": "es-AR", "gl": "ar", "safe": "off"},
-        headers=_COMMON_HEADERS,
-        timeout=15,
-    )
-    if not r.ok:
-        raise RuntimeError(f"Google {r.status_code}")
-    text = r.text
-    if "captcha" in text.lower() or "/sorry/" in text:
-        raise RuntimeError("Google devolvió CAPTCHA — usá Bing o configurá CSE con API key")
-    if "/httpservice/retry/enablejs" in text or "<noscript>" in text and "enablejs" in text:
-        raise RuntimeError(
-            "Google requiere JavaScript (no se puede scrapear desde server). "
-            "Probá Bing, o configurá Google Custom Search API."
-        )
-    matches = _re.findall(
-        r'\["(https?://[^"\\]+\.(?:jpe?g|png|webp|gif)(?:\?[^"\\]*)?)",\s*(\d+),\s*(\d+)\]',
-        text,
-        flags=_re.IGNORECASE,
-    )
-    out: list[dict] = []
-    seen: set[str] = set()
-    for url, h, w in matches:
-        if any(d in url for d in ("gstatic.com", "google.com/logos", "googleusercontent.com/static")):
-            continue
-        if url in seen:
-            continue
-        seen.add(url)
-        out.append({
-            "url": url, "thumb": url, "title": "", "context": None,
-            "width": int(w) if w else None, "height": int(h) if h else None,
-        })
-        if len(out) >= num:
-            break
-    if not out:
-        raise RuntimeError("Google: 0 resultados parseables (probablemente bloqueado). Usá Bing.")
-    return out
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _search_images_ddg(query: str, num: int = 20) -> list[dict]:
-    """DuckDuckGo Images — flow vqd token + i.js JSON."""
-    import re as _re
-    s = _requests.Session()
-    s.headers.update(_COMMON_HEADERS)
-    r1 = s.get(
-        "https://duckduckgo.com/",
-        params={"q": query, "iax": "images", "ia": "images"},
-        timeout=15,
-    )
-    m = _re.search(r'vqd=["\']?(\d+-\d+(?:-\d+)?)', r1.text)
-    if not m:
-        raise RuntimeError("DuckDuckGo: no vqd token (puede estar bloqueando)")
-    vqd = m.group(1)
-    r2 = s.get(
-        "https://duckduckgo.com/i.js",
-        params={"l": "es-ar", "o": "json", "q": query, "vqd": vqd, "f": ",,,", "p": "1"},
-        headers={"Referer": "https://duckduckgo.com/"},
-        timeout=15,
-    )
-    if not r2.ok:
-        raise RuntimeError(f"DuckDuckGo {r2.status_code}")
-    data = r2.json()
-    out: list[dict] = []
-    for item in (data.get("results") or [])[:num]:
-        out.append({
-            "url": item.get("image"),
-            "thumb": item.get("thumbnail") or item.get("image"),
-            "title": item.get("title", ""),
-            "context": item.get("url"),
-            "width": item.get("width"),
-            "height": item.get("height"),
-        })
-    return out
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _search_images_yandex(query: str, num: int = 20) -> list[dict]:
-    """Yandex Images — frecuentemente devuelve captcha desde IPs de servidor."""
-    import html as _html
-    import re as _re
-    r = _requests.get(
-        "https://yandex.com/images/search",
-        params={"text": query, "from": "tabbar"},
-        headers=_COMMON_HEADERS,
-        timeout=15,
-    )
-    if not r.ok:
-        raise RuntimeError(f"Yandex {r.status_code}")
-    if "captcha" in r.text.lower() or "No eres un robot" in r.text or "Are you a robot" in r.text:
-        raise RuntimeError("Yandex devolvió CAPTCHA — usá Bing")
-    matches = _re.findall(r'data-bem=\'(\{[^\']+\})\'', r.text)
-    out: list[dict] = []
-    seen: set[str] = set()
-    for raw in matches:
-        try:
-            d = _json.loads(_html.unescape(raw))
-        except Exception:
-            continue
-        item = d.get("serp-item") or {}
-        url = item.get("img_href") or ""
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        thumb = ((item.get("thumb") or {}).get("url")) or url
-        snip = item.get("snippet") or {}
-        prev = (item.get("preview") or [{}])[0]
-        out.append({
-            "url": url,
-            "thumb": thumb,
-            "title": snip.get("title") or "",
-            "context": snip.get("url"),
-            "width": prev.get("w"),
-            "height": prev.get("h"),
-        })
-        if len(out) >= num:
-            break
-    if not out:
-        raise RuntimeError("Yandex: 0 resultados (probablemente bloqueado). Usá Bing.")
-    return out
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _search_images_google_cse(query: str, num: int = 20) -> list[dict]:
-    """Google Custom Search API — confiable, requiere API key + CX en st.secrets.
-    Free tier: 100 búsquedas/día. Cada llamada devuelve hasta 10 resultados.
-    """
-    try:
-        api_key = st.secrets["GOOGLE_CSE_API_KEY"]
-        cx = st.secrets["GOOGLE_CSE_CX"]
-    except Exception:
-        raise RuntimeError(
-            "Google CSE no configurado. Agregá GOOGLE_CSE_API_KEY y GOOGLE_CSE_CX "
-            "en Streamlit Cloud → Settings → Secrets. Ver instrucciones en el botón ⚙️."
-        )
-    out: list[dict] = []
-    seen: set[str] = set()
-    # CSE máx 10 por request, paginar con start=1, 11, 21...
-    for start in (1, 11):
-        if len(out) >= num:
-            break
-        try:
-            r = _requests.get(
-                "https://www.googleapis.com/customsearch/v1",
-                params={
-                    "key": api_key, "cx": cx, "q": query,
-                    "searchType": "image", "num": "10", "start": str(start),
-                    "safe": "off", "hl": "es",
-                },
-                timeout=15,
-            )
-        except Exception as e:
-            raise RuntimeError(f"Google CSE error de red: {e}")
-        if r.status_code == 429:
-            raise RuntimeError("Google CSE: cuota diaria agotada (100/día). Probá mañana o usá Bing.")
-        if r.status_code == 403:
-            raise RuntimeError(
-                "Google CSE 403 — verificá que la API esté habilitada y la key tenga permisos."
-            )
-        if not r.ok:
-            raise RuntimeError(f"Google CSE {r.status_code}: {r.text[:200]}")
-        data = r.json()
-        for it in (data.get("items") or []):
-            url = it.get("link") or ""
-            if not url or url in seen:
-                continue
-            seen.add(url)
-            img = it.get("image") or {}
-            out.append({
-                "url": url,
-                "thumb": img.get("thumbnailLink") or url,
-                "title": it.get("title") or "",
-                "context": img.get("contextLink"),
-                "width": img.get("width"),
-                "height": img.get("height"),
-            })
-            if len(out) >= num:
-                break
-    if not out:
-        raise RuntimeError("Google CSE: 0 resultados.")
-    return out
-
-
-# Bing primero — es el único confiable scrapeando sin browser real
-# Google CSE necesita API key configurada en secrets (100 búsquedas/día gratis)
+# Bing es el único motor que scrapea bien sin browser real.
+# Google/DDG/Yandex devuelven captcha o requieren JS desde IPs de servidor.
+# Para Google Images se usa modo Manual + botón "Abrir en Google Images" (el usuario copia la URL).
 _IMAGE_ENGINES = {
     "Bing": _search_images_bing,
-    "Google CSE (API)": _search_images_google_cse,
-    "Google (scrape)": _search_images_google,
-    "DuckDuckGo": _search_images_ddg,
-    "Yandex": _search_images_yandex,
 }
 
 
@@ -1018,23 +836,6 @@ if page == "Imágenes":
         st.session_state[_sig_key] = _sig
         st.session_state[f"img_query_{pid}"] = default_q
 
-    # Setup helper para Google CSE
-    with st.expander("⚙️ Configurar Google CSE (API gratis 100/día)", expanded=False):
-        st.markdown(
-            "1. Ir a https://programmablesearchengine.google.com/ → crear motor → "
-            "configurar **\"buscar en toda la web\"** + activar **\"búsqueda de imágenes\"** → "
-            "copiar el `Search engine ID` (CX).\n"
-            "2. Ir a https://console.cloud.google.com/ → APIs → habilitar **Custom Search API** → "
-            "crear API key.\n"
-            "3. En Streamlit Cloud → tu app → Settings → Secrets, pegar:\n"
-            "```toml\n"
-            'GOOGLE_CSE_API_KEY = "AIza..."\n'
-            'GOOGLE_CSE_CX = "abc123..."\n'
-            "```\n"
-            "4. Save → la app se reinicia sola.\n\n"
-            "**Cuota:** 100 búsquedas/día gratis. Cada \"Buscar\" gasta 1-2 (paginación)."
-        )
-
     qc0, qc1, qc2, qc3 = st.columns([1.5, 3, 1, 1])
     with qc0:
         engine = st.selectbox(
@@ -1042,7 +843,7 @@ if page == "Imágenes":
             list(_IMAGE_ENGINES.keys()) + ["Manual (pegar URL)"],
             index=0,
             key="img_engine",
-            help="Bing scrapea sin API. Google CSE = API oficial (100/día gratis). Otros motores suelen bloquear bots. Manual = pegar URL directa.",
+            help="Bing scrapea bien sin API. Manual = pegar URL directa (usá el botón Google Images para abrir y copiar).",
         )
     is_manual = engine == "Manual (pegar URL)"
     with qc1:
@@ -1071,6 +872,16 @@ if page == "Imágenes":
             for _fn in _IMAGE_ENGINES.values():
                 _fn.clear()
             st.rerun()
+
+    # Atajo a Google Images (abre en nueva pestaña; copiás "URL de imagen" y pegás en modo Manual)
+    from urllib.parse import quote_plus as _qp
+    _g_query = (default_q or code or name).strip()
+    if _g_query:
+        st.link_button(
+            f"🔎 Abrir Google Images: {_g_query[:50]}",
+            f"https://www.google.com/search?q={_qp(_g_query)}&tbm=isch",
+            help="Abre Google Images en nueva pestaña. Click derecho en la imagen → 'Copiar dirección de imagen' → pegala arriba en modo Manual.",
+        )
 
     if do_search:
         q_clean = query.strip()
@@ -1130,13 +941,72 @@ if page == "Imágenes":
             st.markdown("**Imagen elegida:**")
             st.image(picked, width=200)
             st.code(picked, language=None)
-            cb1, cb2, _ = st.columns([1, 1, 3])
+            cb1, cb2, _cb3 = st.columns([1.5, 1, 3])
             with cb1:
+                do_upload = st.button(
+                    "📤 Subir a Kyte y actualizar producto",
+                    type="primary",
+                    use_container_width=True,
+                    key="img_upload_btn",
+                )
+            with cb2:
                 st.link_button("🔗 Abrir", picked, use_container_width=True)
-            st.caption(
-                "Para subirla al producto: clic derecho en la imagen → guardar imagen → "
-                "subila desde Kyte web editando el producto. (Subida automática a Kyte: pendiente)"
-            )
+
+            if do_upload:
+                _rt = st.session_state.get("kyte_refresh_token")
+                _kt = st.session_state.get("kyte_token")
+                if not pid or pid == f"{code}__{name}":
+                    st.error("Este producto no tiene id de Kyte (¿está sincronizado?). No puedo subirle imagen.")
+                else:
+                    try:
+                        with st.spinner("Descargando imagen..."):
+                            _r = _requests.get(picked, timeout=20, headers={
+                                "User-Agent": "Mozilla/5.0",
+                                "Accept": "image/*,*/*;q=0.8",
+                            })
+                            _r.raise_for_status()
+                            img_bytes = _r.content
+                            mime = (_r.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip().lower()
+                            if not mime.startswith("image/"):
+                                mime = "image/jpeg"
+                        with st.spinner("Refrescando token Firebase..."):
+                            if _rt:
+                                id_token = refresh_firebase_id_token(_rt)
+                            elif _kt:
+                                id_token = extract_id_token_from_kyte_token(_kt)
+                            else:
+                                raise RuntimeError("No hay token de Kyte cargado.")
+                        with st.spinner("Subiendo a Firebase Storage de Kyte..."):
+                            new_path = upload_image_to_kyte_storage(
+                                img_bytes,
+                                uid=uid,
+                                product_id=str(pid),
+                                id_token=id_token,
+                                mime=mime,
+                            )
+                        with st.spinner("Actualizando producto en Kyte..."):
+                            _prod = dict(selected)
+                            _prod["image"] = new_path
+                            _prod["imageLarge"] = new_path
+                            _prod["imageMedium"] = new_path
+                            _prod["imageThumb"] = new_path
+                            client.update_product(_prod)
+                        # refrescar el producto en cache local
+                        for _i, _p in enumerate(st.session_state.imgmode_products):
+                            if (_p.get("id") or _p.get("_id")) == pid:
+                                _p["image"] = new_path
+                                _p["imageLarge"] = new_path
+                                _p["imageMedium"] = new_path
+                                _p["imageThumb"] = new_path
+                                st.session_state.imgmode_products[_i] = _p
+                                break
+                        st.success(f"✅ Imagen subida y producto actualizado · path: `{new_path}`")
+                        st.session_state.pop("img_picked", None)
+                        st.session_state.pop("img_results", None)
+                    except KyteAPIError as e:
+                        st.error(f"Kyte API: {e}")
+                    except Exception as e:
+                        st.error(f"Falló: {e}")
 
     st.stop()
 

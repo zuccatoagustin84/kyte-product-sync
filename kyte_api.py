@@ -68,6 +68,17 @@ def parse_kyte_token(token: str) -> tuple[str, str]:
     return uid, aid
 
 
+def refresh_firebase_id_token(refresh_token: str) -> str:
+    """Cambia un refresh_token por un id_token Firebase fresco (sin envolverlo en kyte_token)."""
+    resp = requests.post(
+        f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}",
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+    )
+    if resp.status_code != 200:
+        raise KyteAPIError(resp.status_code, f"Firebase refresh failed: {resp.text}", "securetoken.googleapis.com")
+    return resp.json()["id_token"]
+
+
 def refresh_kyte_token(refresh_token: str, aid: str) -> str:
     """
     Use a Firebase refresh token to obtain a fresh kyte_token.
@@ -78,15 +89,87 @@ def refresh_kyte_token(refresh_token: str, aid: str) -> str:
     Returns:
         New kyte_token string (base64, ready to use).
     """
-    resp = requests.post(
-        f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}",
-        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
-    )
-    if resp.status_code != 200:
-        raise KyteAPIError(resp.status_code, f"Firebase refresh failed: {resp.text}", "securetoken.googleapis.com")
-    new_id_token = resp.json()["id_token"]
+    new_id_token = refresh_firebase_id_token(refresh_token)
     raw = f"kyte_{aid}.{new_id_token}"
     return base64.b64encode(raw.encode()).decode().rstrip("=")
+
+
+def extract_id_token_from_kyte_token(kyte_token: str) -> str:
+    """Saca el JWT crudo (id_token Firebase) de adentro del kyte_token base64.
+
+    Devuelve el id_token completo (header.payload.sig) listo para usarlo como
+    Authorization Firebase {token} contra Firebase Storage / Firestore.
+    """
+    token = kyte_token.strip()
+    pad = 4 - len(token) % 4
+    if pad != 4:
+        token += "=" * pad
+    decoded = base64.b64decode(token).decode("utf-8")
+    parts = decoded.split(".")
+    if len(parts) < 4:
+        raise ValueError("kyte_token sin id_token embebido")
+    # decoded == "kyte_{aid}.{header}.{payload}.{sig}"
+    return ".".join(parts[1:4])
+
+
+FIREBASE_STORAGE_BUCKET = "kyte-7c484.appspot.com"
+FIREBASE_STORAGE_BASE = f"https://firebasestorage.googleapis.com/v0/b/{FIREBASE_STORAGE_BUCKET}/o"
+
+
+def upload_image_to_kyte_storage(
+    image_bytes: bytes,
+    *,
+    uid: str,
+    product_id: str,
+    id_token: str,
+    mime: str = "image/jpeg",
+) -> str:
+    """Sube bytes de imagen al Firebase Storage de Kyte.
+
+    Devuelve el path tal cual lo espera el campo `image` del producto
+    (sin el prefijo `uid/` y sin `?alt=media`, igual que `_strip_image_field`).
+    """
+    import uuid
+    from urllib.parse import quote
+
+    ext = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+           "image/webp": "webp", "image/gif": "gif"}.get(mime.lower(), "jpg")
+    fname = f"{uuid.uuid4().hex}.{ext}"
+    path = f"{uid}/products/{product_id}/{fname}"
+    encoded = quote(path, safe="")
+
+    resp = requests.post(
+        f"{FIREBASE_STORAGE_BASE}?name={encoded}&uploadType=media",
+        data=image_bytes,
+        headers={
+            "Authorization": f"Firebase {id_token}",
+            "Content-Type": mime,
+            "Origin": "https://web.kyteapp.com",
+            "Referer": "https://web.kyteapp.com/",
+        },
+        timeout=30,
+    )
+    if resp.status_code >= 400:
+        # Reintento con esquema "Bearer" por si Firebase Storage rechaza el "Firebase" header
+        resp2 = requests.post(
+            f"{FIREBASE_STORAGE_BASE}?name={encoded}&uploadType=media",
+            data=image_bytes,
+            headers={
+                "Authorization": f"Bearer {id_token}",
+                "Content-Type": mime,
+                "Origin": "https://web.kyteapp.com",
+                "Referer": "https://web.kyteapp.com/",
+            },
+            timeout=30,
+        )
+        if resp2.status_code >= 400:
+            raise KyteAPIError(
+                resp.status_code,
+                f"Firebase Storage upload falló: {resp.status_code}/{resp2.status_code} {resp.text[:300]}",
+                FIREBASE_STORAGE_BASE,
+            )
+    # path sin uid/ — Kyte lo agrega solo al servir
+    return f"products/{product_id}/{fname}"
 
 
 @dataclass
